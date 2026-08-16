@@ -12,9 +12,11 @@ if (!env.DATABASE_URL) {
  * 連線設定。本機與 serverless 的最佳解完全不同，兩者差異很大。
  *
  * ── max ──
- * Netlify Functions 每次呼叫都可能是獨立的執行環境，各自帶一個連線池。
- * 本機開 5 條沒問題，但在 serverless 上「每個實例 5 條 × 數十個並行實例」
- * 會直接打爆資料庫的連線上限。正式環境設 1，靠雲端的連線池去分配。
+ * Netlify Functions 每次呼叫都可能是獨立的執行環境，各自帶一個連線池，
+ * 所以不能像單機服務那樣開很大。但也不能設成 1 ——
+ * 那會讓同一個請求裡的並行查詢被迫排隊，跨區延遲下每多一次往返就多 200ms。
+ * 3 條剛好夠 Promise.all 同時跑，又不會在多實例時撐爆。
+ * 前面本來就還有雲端連線池（Supabase 的 pooler）再擋一層。
  *
  * ── prepare ──
  * 雲端 Postgres（Supabase、Neon 等）給的通常是 transaction 模式的
@@ -27,7 +29,7 @@ if (!env.DATABASE_URL) {
  * 在 transaction 模式下依然正確。
  */
 const client = postgres(env.DATABASE_URL, {
-	max: dev ? 5 : 1,
+	max: dev ? 5 : 3,
 	prepare: false,
 	idle_timeout: 20,
 	connect_timeout: 10

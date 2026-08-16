@@ -7,19 +7,16 @@ import { InsufficientBalanceError } from '$lib/server/ledger';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	// 首次載入走 SSR，之後由前端輪詢 /api/board 更新。
-	const [board, leaderboard, roster] = await Promise.all([
+	//
+	// ⚠️ 全部包在同一個 Promise.all 裡，不要拆成兩段 await。
+	// 正式站的 Function 與資料庫可能不在同一區，每次往返 200ms 以上，
+	// 序列化執行會讓首頁直接超時（見 board.ts 裡的說明）。
+	const [board, leaderboard, roster, balance, myBets] = await Promise.all([
 		getBoardState(),
 		getLeaderboard(5),
-		getRoster()
-	]);
-
-	if (!locals.user) {
-		return { board, leaderboard, roster, user: null, balance: 0, myBets: [] };
-	}
-
-	const [balance, myBets] = await Promise.all([
-		getBalance(locals.user.id),
-		getMyBets(locals.user.id, 30)
+		getRoster(),
+		locals.user ? getBalance(locals.user.id) : Promise.resolve(0),
+		locals.user ? getMyBets(locals.user.id, 30) : Promise.resolve([])
 	]);
 
 	return { board, leaderboard, roster, user: locals.user, balance, myBets };

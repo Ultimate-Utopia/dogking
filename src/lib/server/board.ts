@@ -10,7 +10,7 @@
  * ─────────────────────────────────────────────────────────
  */
 
-import { eq, and, desc, asc, sql, inArray, ne } from 'drizzle-orm';
+import { eq, desc, asc, sql } from 'drizzle-orm';
 import { db } from './db';
 import { matches, markets, participants, bets, users, ledger } from './db/schema';
 import { calcOdds, expireLocks } from './tournament';
@@ -47,35 +47,15 @@ export interface BoardMatch {
 	winnerSide: string | null;
 }
 
-/** 選出「當前場次」：優先有開放中的盤口，其次是待結算的，再其次是下一個未完成的。 */
-async function pickCurrentMatch() {
-	const all = await db.select().from(matches).orderBy(asc(matches.orderNo));
-	if (!all.length) return null;
-
-	const allMarkets = await db.select().from(markets);
-
-	const withOpen = all.find((m) =>
-		allMarkets.some((mk) => mk.matchId === m.id && mk.state === 'open')
-	);
-	if (withOpen) return withOpen;
-
-	const withLocked = all.find((m) =>
-		allMarkets.some((mk) => mk.matchId === m.id && mk.state === 'locked')
-	);
-	if (withLocked) return withLocked;
-
-	const unfinished = all.find((m) => m.state !== 'done' && m.state !== 'void');
-	return unfinished ?? all[all.length - 1];
-}
-
 function marketLabel(gameNo: number) {
 	return gameNo === 0 ? '整場勝負' : `第 ${gameNo} 局`;
 }
 
-async function toBoardMatch(m: typeof matches.$inferSelect): Promise<BoardMatch> {
-	const ids = [m.blueParticipantId, m.redParticipantId].filter((x): x is number => x !== null);
-	const rows = ids.length ? await db.select().from(participants).where(inArray(participants.id, ids)) : [];
-	const find = (id: number | null) => (id === null ? null : (rows.find((p) => p.id === id) ?? null));
+function toBoardMatch(
+	m: typeof matches.$inferSelect,
+	people: (typeof participants.$inferSelect)[]
+): BoardMatch {
+	const find = (id: number | null) => (id === null ? null : (people.find((p) => p.id === id) ?? null));
 	const blue = find(m.blueParticipantId);
 	const red = find(m.redParticipantId);
 
@@ -96,59 +76,75 @@ async function toBoardMatch(m: typeof matches.$inferSelect): Promise<BoardMatch>
 	};
 }
 
+/**
+ * 看板資料。
+ *
+ * ⚠️ 這裡刻意「一次抓完再用記憶體算」，不要改回逐項查詢。
+ *
+ * 原本的寫法有 9 次序列查詢（挑當前場次、抓盤口、抓參賽者名字、
+ * 找上一場、找下一場、再各抓一次名字…）。本機對著 Docker 跑
+ * 每次往返不到 1ms，完全看不出問題；但正式站的 Function 在 us-east-1、
+ * 資料庫在別的洲，每次往返 200ms 以上，9 次就是 2 秒起跳，首頁直接超時。
+ *
+ * 全部資料量都很小（13 場次、數十個盤口、12 位成員），
+ * 一次抓回來在記憶體裡挑，比精準查詢快得多。
+ */
 export async function getBoardState() {
 	// 先把倒數到期的盤口改成 locked，否則前台會繼續顯示下注介面
 	await expireLocks();
 
-	const current = await pickCurrentMatch();
+	const [allMatches, allMarkets, allPeople] = await Promise.all([
+		db.select().from(matches).orderBy(asc(matches.orderNo)),
+		db.select().from(markets),
+		db.select().from(participants)
+	]);
 
-	if (!current) {
+	if (!allMatches.length) {
 		return { now: new Date().toISOString(), current: null, markets: [], previous: null, next: null };
 	}
 
-	const marketRows = await db
-		.select()
-		.from(markets)
-		.where(eq(markets.matchId, current.id))
-		.orderBy(asc(markets.gameNo));
+	// 當前場次：優先有開放中的盤口，其次待結算，再其次下一個未完成的
+	const hasState = (matchId: number, state: string) =>
+		allMarkets.some((mk) => mk.matchId === matchId && mk.state === state);
 
-	const boardMarkets: BoardMarket[] = marketRows.map((mk) => {
-		const odds = calcOdds(mk.poolBlue, mk.poolRed);
-		return {
-			id: mk.id,
-			gameNo: mk.gameNo,
-			label: marketLabel(mk.gameNo),
-			state: mk.state,
-			poolBlue: mk.poolBlue,
-			poolRed: mk.poolRed,
-			total: odds.total,
-			oddsBlue: odds.blue,
-			oddsRed: odds.red,
-			lockAt: mk.lockAt ? mk.lockAt.toISOString() : null,
-			winnerSide: mk.winnerSide
-		};
-	});
+	const current =
+		allMatches.find((m) => hasState(m.id, 'open')) ??
+		allMatches.find((m) => hasState(m.id, 'locked')) ??
+		allMatches.find((m) => m.state !== 'done' && m.state !== 'void') ??
+		allMatches[allMatches.length - 1];
 
-	const [prevRow] = await db
-		.select()
-		.from(matches)
-		.where(and(sql`${matches.orderNo} < ${current.orderNo}`, eq(matches.state, 'done')))
-		.orderBy(desc(matches.orderNo))
-		.limit(1);
+	const boardMarkets: BoardMarket[] = allMarkets
+		.filter((mk) => mk.matchId === current.id)
+		.sort((a, b) => a.gameNo - b.gameNo)
+		.map((mk) => {
+			const odds = calcOdds(mk.poolBlue, mk.poolRed);
+			return {
+				id: mk.id,
+				gameNo: mk.gameNo,
+				label: marketLabel(mk.gameNo),
+				state: mk.state,
+				poolBlue: mk.poolBlue,
+				poolRed: mk.poolRed,
+				total: odds.total,
+				oddsBlue: odds.blue,
+				oddsRed: odds.red,
+				lockAt: mk.lockAt ? mk.lockAt.toISOString() : null,
+				winnerSide: mk.winnerSide
+			};
+		});
 
-	const [nextRow] = await db
-		.select()
-		.from(matches)
-		.where(and(sql`${matches.orderNo} > ${current.orderNo}`, ne(matches.state, 'void')))
-		.orderBy(asc(matches.orderNo))
-		.limit(1);
+	const prevRow = [...allMatches]
+		.reverse()
+		.find((m) => m.orderNo < current.orderNo && m.state === 'done');
+
+	const nextRow = allMatches.find((m) => m.orderNo > current.orderNo && m.state !== 'void');
 
 	return {
 		now: new Date().toISOString(),
-		current: await toBoardMatch(current),
+		current: toBoardMatch(current, allPeople),
 		markets: boardMarkets,
-		previous: prevRow ? await toBoardMatch(prevRow) : null,
-		next: nextRow ? await toBoardMatch(nextRow) : null
+		previous: prevRow ? toBoardMatch(prevRow, allPeople) : null,
+		next: nextRow ? toBoardMatch(nextRow, allPeople) : null
 	};
 }
 
