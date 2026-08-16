@@ -1,0 +1,527 @@
+/* 前台看板。
+   註：這是資訊架構到位的版本，尚未做企劃書 DEMO 圖那套競技場視覺 ——
+   那需要 DORO 立繪等美術素材到齊後才能施工。 */
+
+.board {
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 0 18px 90px;
+}
+
+/* ── 頂部導覽列 ───────────────────────────────────── */
+.topbar {
+	position: sticky;
+	top: 0;
+	z-index: 20;
+	background: var(--surface);
+	border-bottom: 1px solid var(--line);
+	margin-bottom: 22px;
+}
+.topbar-in {
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 11px 18px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+.brand {
+	font-weight: 700;
+	font-size: 16px;
+	text-decoration: none;
+	color: var(--ink);
+}
+.purse {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	font-size: 14px;
+}
+.purse .coins {
+	font-family: var(--mono);
+	font-size: 19px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+.purse .who {
+	color: var(--muted);
+}
+
+/* ── 賽事看板 ─────────────────────────────────────── */
+.stage {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 20px 22px;
+	margin-bottom: 16px;
+}
+
+.stage-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: 16px;
+}
+.round {
+	font-size: 19px;
+	font-weight: 700;
+}
+.round small {
+	font-weight: 400;
+	color: var(--muted);
+	font-size: 14px;
+	margin-left: 8px;
+}
+
+.versus {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	gap: 14px;
+	align-items: center;
+}
+.fighter {
+	padding: 14px 16px;
+	border-radius: 8px;
+	border: 2px solid;
+	min-width: 0;
+}
+.fighter.b {
+	border-color: var(--blue);
+	background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+.fighter.r {
+	border-color: var(--red);
+	background: color-mix(in srgb, var(--red) 8%, transparent);
+	text-align: right;
+}
+.fighter .tagline {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.14em;
+	color: var(--muted);
+	margin-bottom: 3px;
+}
+.fighter .nm {
+	font-size: 19px;
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+.score {
+	font-family: var(--mono);
+	font-size: 30px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	font-weight: 700;
+}
+
+/* ── 盤口卡 ───────────────────────────────────────── */
+.markets {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	margin-bottom: 22px;
+}
+
+.mk {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 18px 20px;
+}
+.mk.open {
+	border-color: var(--ok);
+	border-width: 2px;
+}
+
+.mk-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 14px;
+}
+.mk-name {
+	font-weight: 700;
+	font-size: 16px;
+}
+
+.countdown {
+	font-family: var(--mono);
+	font-size: 19px;
+	font-variant-numeric: tabular-nums;
+	color: var(--red);
+	font-weight: 700;
+}
+
+/* 賠率 */
+.odds {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+.odd {
+	padding: 12px 14px;
+	border-radius: 8px;
+	color: #fff;
+}
+.odd.b {
+	background: var(--blue);
+}
+.odd.r {
+	background: var(--red);
+	text-align: right;
+}
+.odd .lab {
+	font-size: 12px;
+	opacity: 0.85;
+}
+.odd .val {
+	font-family: var(--mono);
+	font-size: 25px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+/* 彩池佔比條 */
+.split {
+	display: flex;
+	height: 26px;
+	border-radius: 5px;
+	overflow: hidden;
+	border: 1px solid var(--line);
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+.split div {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+	min-width: 0;
+	transition: flex-grow 0.4s ease;
+}
+.split .sb {
+	background: var(--blue);
+}
+.split .sr {
+	background: var(--red);
+}
+.split .none {
+	background: var(--line);
+	color: var(--muted);
+	flex: 1;
+}
+.split-legend {
+	display: flex;
+	justify-content: space-between;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--muted);
+	margin-top: 6px;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── 下注區 ───────────────────────────────────────── */
+.betbox {
+	margin-top: 16px;
+	padding-top: 16px;
+	border-top: 1px solid var(--line);
+}
+
+.sides {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+.side-btn {
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	padding: 14px;
+	border-radius: 8px;
+	border: 2px solid var(--line);
+	background: transparent;
+	color: var(--ink);
+	cursor: pointer;
+}
+.side-btn.b.on {
+	border-color: var(--blue);
+	background: var(--blue);
+	color: #fff;
+}
+.side-btn.r.on {
+	border-color: var(--red);
+	background: var(--red);
+	color: #fff;
+}
+.side-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.chips {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+.chip-btn {
+	font-family: var(--mono);
+	font-size: 14px;
+	font-weight: 700;
+	padding: 11px 15px;
+	border-radius: 999px;
+	border: 2px solid var(--line);
+	background: var(--surface);
+	color: var(--ink);
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+}
+.chip-btn:hover:not(:disabled) {
+	border-color: var(--blue);
+}
+.chip-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.chip-btn.clear {
+	border-style: dashed;
+	color: var(--muted);
+}
+
+.stake {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	background: var(--paper);
+	border-radius: 8px;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+}
+.stake .n {
+	font-family: var(--mono);
+	font-size: 26px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+}
+.stake .est {
+	font-size: 13px;
+	color: var(--muted);
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.submit {
+	width: 100%;
+	font-family: inherit;
+	font-size: 16px;
+	font-weight: 700;
+	padding: 15px;
+	border-radius: 8px;
+	border: none;
+	background: var(--ok);
+	color: #fff;
+	cursor: pointer;
+}
+.submit:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.closed-note {
+	text-align: center;
+	color: var(--muted);
+	font-size: 14px;
+	padding: 12px;
+}
+
+/* ── 二次確認 ─────────────────────────────────────── */
+.backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	z-index: 100;
+}
+/* 點背景關閉用的按鈕。鋪滿整個背景但完全透明，
+   用 button 是為了讓鍵盤與螢幕閱讀器也能操作。 */
+.backdrop-close {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	background: transparent;
+	border: none;
+	cursor: default;
+	padding: 0;
+}
+
+.modal {
+	position: relative;
+	background: var(--surface);
+	border-radius: 12px;
+	padding: 24px;
+	max-width: 400px;
+	width: 100%;
+	border: 1px solid var(--line);
+}
+.modal:focus-visible {
+	outline: 2px solid var(--blue);
+	outline-offset: 3px;
+}
+.modal h3 {
+	margin: 0 0 14px;
+	font-size: 19px;
+}
+.modal dl {
+	margin: 0 0 18px;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 8px 16px;
+	font-size: 15px;
+}
+.modal dt {
+	color: var(--muted);
+}
+.modal dd {
+	margin: 0;
+	text-align: right;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+.modal .fine {
+	font-size: 12.5px;
+	color: var(--muted);
+	margin: 0 0 18px;
+	line-height: 1.6;
+}
+.modal-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+}
+.modal-actions button {
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	padding: 13px;
+	border-radius: 8px;
+	border: 1px solid var(--line);
+	cursor: pointer;
+}
+.modal-actions .no {
+	background: transparent;
+	color: var(--muted);
+}
+.modal-actions .yes {
+	background: var(--ok);
+	color: #fff;
+	border-color: transparent;
+}
+
+/* ── 側欄區塊 ─────────────────────────────────────── */
+.cols {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 16px;
+}
+@media (min-width: 820px) {
+	.cols {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+.card2 {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 18px 20px;
+}
+.card2 h2 {
+	margin: 0 0 14px;
+	font-size: 16px;
+}
+
+.rank-row {
+	display: grid;
+	grid-template-columns: 26px 1fr auto;
+	gap: 12px;
+	align-items: center;
+	padding: 7px 0;
+	border-bottom: 1px solid var(--line);
+	font-size: 14.5px;
+}
+.rank-row:last-child {
+	border-bottom: none;
+}
+.rank-row .r {
+	font-family: var(--mono);
+	color: var(--muted);
+	text-align: center;
+}
+.rank-row .v {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+
+.bet-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 9px 0;
+	border-bottom: 1px solid var(--line);
+	font-size: 14px;
+	flex-wrap: wrap;
+}
+.bet-row:last-child {
+	border-bottom: none;
+}
+.bet-row .meta {
+	color: var(--muted);
+	font-size: 12.5px;
+}
+.bet-row .amt {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.msg-ok,
+.msg-err {
+	padding: 12px 16px;
+	border-radius: 8px;
+	margin-bottom: 16px;
+	font-size: 14.5px;
+	color: #fff;
+}
+.msg-ok {
+	background: var(--ok);
+}
+.msg-err {
+	background: var(--red);
+}
+
+.foot {
+	margin-top: 34px;
+	padding-top: 18px;
+	border-top: 1px solid var(--line);
+	font-size: 13px;
+	color: var(--muted);
+	line-height: 1.9;
+}
