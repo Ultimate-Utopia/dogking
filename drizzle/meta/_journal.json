@@ -29,6 +29,20 @@
       "when": 1786898725909,
       "tag": "0003_purchase_orders_and_public_code",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786901252702,
+      "tag": "0004_participant_role_and_doro",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786901277281,
+      "tag": "0005_drop_legacy_participant_images",
+      "breakpoints": true
     }
   ]
 }

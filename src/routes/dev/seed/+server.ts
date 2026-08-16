@@ -9,22 +9,41 @@
 
 import { json, error } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { participants, matches } from '$lib/server/db/schema';
 
-/** 參賽主播。頻道連結與立繪待補。 */
-const PARTICIPANTS = [
-	'呦呦',
-	'希亞',
-	'咩嚕',
-	'雪寶',
-	'渡渡',
-	'悠妮',
-	'阿翼',
-	'姆莉',
-	'愛紗'
+/**
+ * 參賽主播與主持群。
+ *
+ * 企劃書用的是簡稱（呦呦、希亞、咩嚕…），繪師交來的立繪用的是完整台名。
+ * 這裡以完整台名為準，並記下對應關係供核對：
+ *
+ *   呦呦→呦呦　希亞→希蘿亞　咩嚕→黒羊める　雪寶→雪寶うさぎ　渡渡→伊索渡
+ *   悠妮→悠妮涅可　阿翼→悠太翼　姆莉→姆莉醬　愛紗→愛紗公主
+ *
+ * 12 個立繪資料夾 = 9 位參賽者 + 3 位主持，沒有多餘也沒有缺漏，
+ * 與企劃書的名單完全吻合。頻道連結待補。
+ */
+const PARTICIPANTS: Array<{
+	name: string;
+	role: 'player' | 'host';
+	roleLabel?: string;
+	doroSlug: string;
+}> = [
+	{ name: '呦呦', role: 'player', doroSlug: 'youyou' },
+	{ name: '希蘿亞', role: 'player', doroSlug: 'shiroa' },
+	{ name: '黒羊める', role: 'player', doroSlug: 'meru' },
+	{ name: '雪寶うさぎ', role: 'player', doroSlug: 'yukibo' },
+	{ name: '伊索渡', role: 'player', doroSlug: 'isodo' },
+	{ name: '悠妮涅可', role: 'player', doroSlug: 'yunineko' },
+	{ name: '悠太翼', role: 'player', doroSlug: 'yuuta' },
+	{ name: '姆莉醬', role: 'player', doroSlug: 'muri' },
+	{ name: '愛紗公主', role: 'player', doroSlug: 'aisa' },
+	{ name: '語風薯薯', role: 'host', roleLabel: '賽事主持', doroSlug: 'shushu' },
+	{ name: '可樂月月', role: 'host', roleLabel: '賽事副持', doroSlug: 'yueyue' },
+	{ name: '艾絲梅亞', role: 'host', roleLabel: '賭盤副台', doroSlug: 'esmeya' }
 ];
 
 /**
@@ -80,11 +99,19 @@ export const GET: RequestHandler = async () => {
 	let addedParticipants = 0;
 	let addedMatches = 0;
 
-	if (existingP.length === 0) {
-		await db
-			.insert(participants)
-			.values(PARTICIPANTS.map((name, i) => ({ name, orderNo: i + 1 })));
-		addedParticipants = PARTICIPANTS.length;
+	// 逐筆比對名稱：已存在就補上角色與立繪，不存在就新增。
+	// 用 upsert 而非「全空才建立」，新的人員或新交件的立繪才補得進來。
+	for (const [i, p] of PARTICIPANTS.entries()) {
+		const found = existingP.find((e) => e.name === p.name);
+		if (found) {
+			await db
+				.update(participants)
+				.set({ doroSlug: p.doroSlug, role: p.role, roleLabel: p.roleLabel ?? null })
+				.where(eq(participants.id, found.id));
+		} else {
+			await db.insert(participants).values({ ...p, orderNo: i + 1 });
+			addedParticipants++;
+		}
 	}
 
 	if (existingM.length === 0) {
@@ -99,7 +126,8 @@ export const GET: RequestHandler = async () => {
 		addedParticipants,
 		addedMatches,
 		skipped: addedParticipants === 0 && addedMatches === 0 ? '資料已存在，未重複建立' : undefined,
-		participants: finalP.map((p) => p.name),
+		參賽者: finalP.filter((p) => p.role === 'player').map((p) => `${p.name}(${p.doroSlug ?? '無立繪'})`),
+		主持群: finalP.filter((p) => p.role === 'host').map((p) => `${p.roleLabel} ${p.name}`),
 		matches: finalM.map((m) => ({
 			場次: m.orderNo,
 			輪次: m.roundLabel,

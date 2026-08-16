@@ -248,11 +248,17 @@
 
 			<div class="versus">
 				<div class="fighter b">
+					{#if c.blueDoro}
+						<img class="doro" src="/participants/{c.blueDoro}-lg.webp" alt="" width="640" height="640" />
+					{/if}
 					<div class="tagline">藍方</div>
 					<div class="nm">{c.blueName ?? '待定'}</div>
 				</div>
 				<div class="score">{c.scoreBlue} - {c.scoreRed}</div>
 				<div class="fighter r">
+					{#if c.redDoro}
+						<img class="doro" src="/participants/{c.redDoro}-lg.webp" alt="" width="640" height="640" />
+					{/if}
 					<div class="tagline">紅方</div>
 					<div class="nm">{c.redName ?? '待定'}</div>
 				</div>
@@ -480,6 +486,50 @@
 					<p style="margin:0;color:var(--muted)">還沒有下注紀錄。</p>
 				{/each}
 			{/if}
+		</div>
+	</div>
+
+	<!-- ── 賽況資訊區（企劃書 §七）──────────────────────── -->
+	<div class="card2" style="margin-top:16px">
+		<h2>參賽主播</h2>
+		<div class="roster">
+			{#each data.roster.players as p (p.id)}
+				<svelte:element
+					this={p.channelUrl ? 'a' : 'div'}
+					class="member"
+					href={p.channelUrl ?? undefined}
+					target={p.channelUrl ? '_blank' : undefined}
+					rel={p.channelUrl ? 'noopener noreferrer' : undefined}
+				>
+					{#if p.doroSlug}
+						<img src="/participants/{p.doroSlug}-sm.webp" alt="" width="256" height="256" loading="lazy" />
+					{:else}
+						<div class="no-art">未到</div>
+					{/if}
+					<span>{p.name}</span>
+				</svelte:element>
+			{/each}
+		</div>
+
+		<h2 style="margin-top:22px">主持群</h2>
+		<div class="roster">
+			{#each data.roster.hosts as p (p.id)}
+				<svelte:element
+					this={p.channelUrl ? 'a' : 'div'}
+					class="member"
+					href={p.channelUrl ?? undefined}
+					target={p.channelUrl ? '_blank' : undefined}
+					rel={p.channelUrl ? 'noopener noreferrer' : undefined}
+				>
+					{#if p.doroSlug}
+						<img src="/participants/{p.doroSlug}-sm.webp" alt="" width="256" height="256" loading="lazy" />
+					{:else}
+						<div class="no-art">未到</div>
+					{/if}
+					<span>{p.name}</span>
+					<small>{p.roleLabel}</small>
+				</svelte:element>
+			{/each}
 		</div>
 	</div>
 

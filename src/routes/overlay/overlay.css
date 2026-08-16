@@ -195,9 +195,29 @@
 	margin-bottom: 14px;
 }
 .team {
-	padding: 12px 16px;
+	padding: 10px 14px;
 	border-radius: 12px;
 	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.team-txt {
+	min-width: 0;
+	flex: 1;
+}
+
+/* 立繪。紅方水平翻轉，兩人才像在對戰。 */
+.art {
+	width: 62px;
+	height: 62px;
+	flex: none;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.25);
+	filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+.art.flip {
+	transform: scaleX(-1);
 }
 .team.blue {
 	background: linear-gradient(135deg, var(--o-blue-deep), var(--o-blue));

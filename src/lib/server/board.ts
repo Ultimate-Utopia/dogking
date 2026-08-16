@@ -38,6 +38,9 @@ export interface BoardMatch {
 	isElimination: boolean;
 	blueName: string | null;
 	redName: string | null;
+	/** DORO 立繪的 slug，前端組成 /participants/{slug}-lg.webp */
+	blueDoro: string | null;
+	redDoro: string | null;
 	scoreBlue: number;
 	scoreRed: number;
 	state: string;
@@ -71,8 +74,10 @@ function marketLabel(gameNo: number) {
 
 async function toBoardMatch(m: typeof matches.$inferSelect): Promise<BoardMatch> {
 	const ids = [m.blueParticipantId, m.redParticipantId].filter((x): x is number => x !== null);
-	const names = ids.length ? await db.select().from(participants).where(inArray(participants.id, ids)) : [];
-	const nameOf = (id: number | null) => (id === null ? null : (names.find((p) => p.id === id)?.name ?? null));
+	const rows = ids.length ? await db.select().from(participants).where(inArray(participants.id, ids)) : [];
+	const find = (id: number | null) => (id === null ? null : (rows.find((p) => p.id === id) ?? null));
+	const blue = find(m.blueParticipantId);
+	const red = find(m.redParticipantId);
 
 	return {
 		id: m.id,
@@ -80,8 +85,10 @@ async function toBoardMatch(m: typeof matches.$inferSelect): Promise<BoardMatch>
 		roundLabel: m.roundLabel,
 		format: m.format,
 		isElimination: m.isElimination,
-		blueName: nameOf(m.blueParticipantId),
-		redName: nameOf(m.redParticipantId),
+		blueName: blue?.name ?? null,
+		redName: red?.name ?? null,
+		blueDoro: blue?.doroSlug ?? null,
+		redDoro: red?.doroSlug ?? null,
 		scoreBlue: m.scoreBlue,
 		scoreRed: m.scoreRed,
 		state: m.state,
@@ -166,6 +173,15 @@ export async function getLeaderboard(limit = 5) {
 		.limit(limit);
 
 	return rows.map((r, i) => ({ rank: i + 1, ...r, balance: Number(r.balance) }));
+}
+
+/** 賽況資訊區用：參賽者與主持群，含立繪與頻道連結。 */
+export async function getRoster() {
+	const rows = await db.select().from(participants).orderBy(asc(participants.orderNo));
+	return {
+		players: rows.filter((p) => p.role === 'player'),
+		hosts: rows.filter((p) => p.role === 'host')
+	};
 }
 
 /** 使用者在指定盤口上已下的注，用於前台顯示「你已押 X」。 */

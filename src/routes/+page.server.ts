@@ -1,16 +1,20 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { getBalance } from '$lib/server/ledger';
-import { getBoardState, getLeaderboard, getMyBets } from '$lib/server/board';
+import { getBoardState, getLeaderboard, getMyBets, getRoster } from '$lib/server/board';
 import { placeBet } from '$lib/server/tournament';
 import { InsufficientBalanceError } from '$lib/server/ledger';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	// 首次載入走 SSR，之後由前端輪詢 /api/board 更新。
-	const [board, leaderboard] = await Promise.all([getBoardState(), getLeaderboard(5)]);
+	const [board, leaderboard, roster] = await Promise.all([
+		getBoardState(),
+		getLeaderboard(5),
+		getRoster()
+	]);
 
 	if (!locals.user) {
-		return { board, leaderboard, user: null, balance: 0, myBets: [] };
+		return { board, leaderboard, roster, user: null, balance: 0, myBets: [] };
 	}
 
 	const [balance, myBets] = await Promise.all([
@@ -18,7 +22,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		getMyBets(locals.user.id, 30)
 	]);
 
-	return { board, leaderboard, user: locals.user, balance, myBets };
+	return { board, leaderboard, roster, user: locals.user, balance, myBets };
 };
 
 export const actions: Actions = {

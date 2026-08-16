@@ -40,6 +40,8 @@
 		roundLabel: string;
 		blueName: string | null;
 		redName: string | null;
+		blueDoro: string | null;
+		redDoro: string | null;
 		scoreBlue: number;
 		scoreRed: number;
 	}
@@ -178,13 +180,23 @@
 
 				<div class="duel">
 					<div class="team blue">
-						<div class="team-name">{current.blueName ?? '藍方'}</div>
-						<div class="team-odds">{active.oddsBlue ? active.oddsBlue.toFixed(2) : '—'}</div>
+						{#if current.blueDoro}
+							<img class="art" src="/participants/{current.blueDoro}-sm.webp" alt="" />
+						{/if}
+						<div class="team-txt">
+							<div class="team-name">{current.blueName ?? '藍方'}</div>
+							<div class="team-odds">{active.oddsBlue ? active.oddsBlue.toFixed(2) : '—'}</div>
+						</div>
 					</div>
 					<div class="score">{current.scoreBlue}<span>:</span>{current.scoreRed}</div>
 					<div class="team red">
-						<div class="team-name">{current.redName ?? '紅方'}</div>
-						<div class="team-odds">{active.oddsRed ? active.oddsRed.toFixed(2) : '—'}</div>
+						<div class="team-txt">
+							<div class="team-name">{current.redName ?? '紅方'}</div>
+							<div class="team-odds">{active.oddsRed ? active.oddsRed.toFixed(2) : '—'}</div>
+						</div>
+						{#if current.redDoro}
+							<img class="art flip" src="/participants/{current.redDoro}-sm.webp" alt="" />
+						{/if}
 					</div>
 				</div>
 

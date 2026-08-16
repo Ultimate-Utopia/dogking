@@ -91,11 +91,27 @@ export const sessions = pgTable(
 export const participants = pgTable('participants', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull(),
+
+	/**
+	 * player = 9 位參賽主播，只有這些能被指派到場次
+	 * host   = 主持與副台（語風薯薯、可樂月月、艾絲梅亞），只在賽況資訊區露出
+	 */
+	role: text('role').notNull().default('player'),
+	/** 主持人的職稱，例如「主持人」「同步視聽」 */
+	roleLabel: text('role_label'),
+
 	/** 頻道連結，賽況資訊區點擊導向 */
 	channelUrl: text('channel_url'),
-	avatarUrl: text('avatar_url'),
-	/** DORO 化立繪，等繪師交件後填入。未到齊前前端用佔位圖。 */
-	doroImageUrl: text('doro_image_url'),
+
+	/**
+	 * DORO 立繪的 slug，例如 youyou。
+	 *
+	 * 實際檔案是 /participants/{slug}-sm.webp 與 -lg.webp，
+	 * 由 scripts/build-participant-images.mjs 產生。
+	 * 存 slug 而非完整路徑，之後要換尺寸或格式不用改資料。
+	 */
+	doroSlug: text('doro_slug'),
+
 	/** 顯示順序 */
 	orderNo: integer('order_no').notNull().default(0),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
