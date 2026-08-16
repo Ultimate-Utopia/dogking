@@ -1,0 +1,14 @@
+node_modules
+/.svelte-kit
+/build
+/.netlify
+
+.env
+.env.*
+!.env.example
+
+/postgres-data
+
+.DS_Store
+Thumbs.db
+*.log

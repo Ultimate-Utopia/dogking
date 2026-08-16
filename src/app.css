@@ -1,0 +1,140 @@
+/* 開發階段的最小樣式。正式視覺（DEMO 圖那套）之後再做。 */
+
+:root {
+	--paper: #f5f7fa;
+	--surface: #ffffff;
+	--line: #dce2ea;
+	--ink: #141922;
+	--muted: #69748a;
+	--blue: #1f5fd0;
+	--red: #c4342c;
+	--ok: #1e7a55;
+
+	--sans: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', -apple-system, system-ui, sans-serif;
+	--mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--paper: #0e1218;
+		--surface: #161c25;
+		--line: #28313d;
+		--ink: #e3e8f0;
+		--muted: #828e9f;
+		--blue: #6c9bf0;
+		--red: #e87a72;
+		--ok: #54be8a;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--sans);
+	line-height: 1.7;
+}
+
+a {
+	color: var(--blue);
+}
+
+.wrap {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 48px 20px 80px;
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 20px 22px;
+	margin-bottom: 20px;
+}
+
+.btn {
+	display: inline-block;
+	background: var(--blue);
+	color: #fff;
+	border: none;
+	border-radius: 6px;
+	padding: 10px 20px;
+	font-size: 15px;
+	font-family: inherit;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.btn.ghost {
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid var(--line);
+}
+
+.balance {
+	font-family: var(--mono);
+	font-size: 40px;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+}
+
+.label {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.14em;
+	color: var(--muted);
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+th,
+td {
+	text-align: left;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--line);
+}
+
+th {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	color: var(--muted);
+	font-weight: 500;
+}
+
+td.num {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.pos {
+	color: var(--ok);
+}
+.neg {
+	color: var(--red);
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+
+.avatar {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	border: 1px solid var(--line);
+}
