@@ -14,7 +14,7 @@
 
 import { eq, and, inArray, asc } from 'drizzle-orm';
 import { db } from './db';
-import { markets, bets, matches } from './db/schema';
+import { markets, bets, matches, users, participants } from './db/schema';
 import { lockUser, writeLedger } from './ledger';
 import type { Side } from './db/schema';
 
@@ -386,8 +386,153 @@ async function refundAll(tx: Executor, marketId: number, reason: string) {
 }
 
 // ─────────────────────────────────────────────────────────
+// 結算預覽
+// ─────────────────────────────────────────────────────────
+
+export interface SettlePreview {
+	totalPool: number;
+	winnerPool: number;
+	/** 贏方無人下注時會轉為全額退款，而非派彩 */
+	willRefund: boolean;
+	reason?: string;
+	totalPayout: number;
+	remainder: number;
+	rows: Array<{
+		displayName: string;
+		side: Side;
+		amount: number;
+		payout: number;
+		result: '獲勝' | '失敗' | '退款';
+	}>;
+}
+
+/**
+ * 試算結算結果，不寫入任何東西。
+ *
+ * 派彩會直接寫進帳本且無法復原，所以後台在按下確認前
+ * 必須先讓操作員看到「誰會拿到多少」。
+ */
+export async function previewSettle(marketId: number, winnerSide: Side): Promise<SettlePreview> {
+	const [market] = await db.select().from(markets).where(eq(markets.id, marketId)).limit(1);
+	if (!market) throw new MarketNotFoundError(marketId);
+
+	const totalPool = market.poolBlue + market.poolRed;
+	const winnerPool = winnerSide === 'blue' ? market.poolBlue : market.poolRed;
+
+	const rows = await db
+		.select({
+			displayName: users.displayName,
+			side: bets.side,
+			amount: bets.amount
+		})
+		.from(bets)
+		.innerJoin(users, eq(bets.userId, users.id))
+		.where(and(eq(bets.marketId, marketId), eq(bets.state, 'pending')))
+		.orderBy(asc(bets.id));
+
+	const willRefund = winnerPool === 0 && rows.length > 0;
+
+	let totalPayout = 0;
+	const detailed = rows.map((r) => {
+		const side = r.side as Side;
+		let payout = 0;
+		let result: '獲勝' | '失敗' | '退款';
+
+		if (willRefund) {
+			payout = r.amount;
+			result = '退款';
+		} else if (side === winnerSide) {
+			payout = calcPayout(r.amount, winnerPool, totalPool);
+			result = '獲勝';
+		} else {
+			result = '失敗';
+		}
+
+		totalPayout += payout;
+		return { displayName: r.displayName, side, amount: r.amount, payout, result };
+	});
+
+	return {
+		totalPool,
+		winnerPool,
+		willRefund,
+		reason: willRefund ? '贏方無人下注，將全額退款' : undefined,
+		totalPayout,
+		remainder: willRefund ? 0 : totalPool - totalPayout,
+		rows: detailed
+	};
+}
+
+// ─────────────────────────────────────────────────────────
+// 場次維護
+// ─────────────────────────────────────────────────────────
+
+/** 設定對戰組合。雙敗淘汰下，賽程推進後才由後台填入。 */
+export async function setMatchParticipants(
+	matchId: number,
+	blueParticipantId: number | null,
+	redParticipantId: number | null
+) {
+	if (
+		blueParticipantId !== null &&
+		redParticipantId !== null &&
+		blueParticipantId === redParticipantId
+	) {
+		throw new MarketStateError('對戰雙方不能是同一位參賽者');
+	}
+
+	const [updated] = await db
+		.update(matches)
+		.set({ blueParticipantId, redParticipantId })
+		.where(eq(matches.id, matchId))
+		.returning();
+
+	return updated;
+}
+
+/** 更新比分與賽事狀態。 */
+export async function updateMatchScore(
+	matchId: number,
+	scoreBlue: number,
+	scoreRed: number,
+	state: string,
+	winnerSide: Side | null
+) {
+	const [updated] = await db
+		.update(matches)
+		.set({ scoreBlue, scoreRed, state, winnerSide })
+		.where(eq(matches.id, matchId))
+		.returning();
+
+	return updated;
+}
+
+// ─────────────────────────────────────────────────────────
 // 查詢
 // ─────────────────────────────────────────────────────────
+
+/** 場次總覽，供後台列表使用。 */
+export async function listMatches() {
+	const rows = await db.select().from(matches).orderBy(asc(matches.orderNo));
+	const allParticipants = await db.select().from(participants);
+	const allMarkets = await db.select().from(markets);
+
+	const nameOf = (id: number | null) =>
+		id === null ? null : (allParticipants.find((p) => p.id === id)?.name ?? null);
+
+	return rows.map((m) => {
+		const own = allMarkets.filter((mk) => mk.matchId === m.id);
+		return {
+			...m,
+			blueName: nameOf(m.blueParticipantId),
+			redName: nameOf(m.redParticipantId),
+			marketCount: own.length,
+			openCount: own.filter((mk) => mk.state === 'open').length,
+			lockedCount: own.filter((mk) => mk.state === 'locked').length,
+			pooled: own.reduce((sum, mk) => sum + mk.poolBlue + mk.poolRed, 0)
+		};
+	});
+}
 
 /** 取得場次與其所有盤口，供看板與後台使用。 */
 export async function getMatchWithMarkets(matchId: number) {

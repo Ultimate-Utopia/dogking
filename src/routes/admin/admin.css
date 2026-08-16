@@ -1,0 +1,370 @@
+/* 後台樣式。前提：操作員可能當天才第一次接觸系統，
+   所以按鈕要大、狀態要一眼可辨、危險動作要和安全動作長得不一樣。 */
+
+.admin-shell {
+	min-height: 100vh;
+	background: var(--paper);
+}
+
+.admin-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+	padding: 14px 24px;
+	background: var(--surface);
+	border-bottom: 1px solid var(--line);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.admin-brand {
+	font-weight: 700;
+	font-size: 17px;
+	text-decoration: none;
+	color: var(--ink);
+}
+.admin-brand span {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	color: var(--muted);
+	margin-left: 6px;
+}
+
+.admin-who {
+	font-size: 14px;
+	color: var(--muted);
+	display: flex;
+	gap: 16px;
+	align-items: center;
+}
+
+.admin-main {
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 28px 24px 96px;
+}
+
+.admin-main h1 {
+	font-size: 24px;
+	margin: 0 0 4px;
+}
+.admin-main h2 {
+	font-size: 17px;
+	margin: 32px 0 12px;
+}
+
+.hint {
+	color: var(--muted);
+	font-size: 14px;
+	margin: 0 0 20px;
+}
+
+/* ── 場次列表 ─────────────────────────────────────── */
+.match-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.match-row {
+	display: grid;
+	grid-template-columns: 54px 1fr auto;
+	gap: 16px;
+	align-items: center;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 14px 18px;
+	text-decoration: none;
+	color: var(--ink);
+}
+.match-row:hover {
+	border-color: var(--blue);
+}
+
+.match-no {
+	font-family: var(--mono);
+	font-size: 20px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+	text-align: center;
+}
+
+.match-vs {
+	font-weight: 600;
+}
+.match-meta {
+	font-size: 13px;
+	color: var(--muted);
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-top: 2px;
+}
+
+/* ── 盤口卡 ───────────────────────────────────────── */
+.market-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 14px;
+}
+
+.market {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 16px 18px;
+}
+.market.is-open {
+	border-color: var(--ok);
+	border-width: 2px;
+}
+.market.is-locked {
+	border-color: var(--wait);
+	border-width: 2px;
+}
+
+.market-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+.market-title {
+	font-weight: 600;
+}
+
+.pools {
+	display: flex;
+	height: 30px;
+	border-radius: 5px;
+	overflow: hidden;
+	border: 1px solid var(--line);
+	margin-bottom: 6px;
+	font-family: var(--mono);
+	font-size: 12px;
+}
+.pools div {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+	min-width: 0;
+	overflow: hidden;
+}
+.pool-b {
+	background: var(--blue);
+}
+.pool-r {
+	background: var(--red);
+}
+.pool-empty {
+	background: var(--line);
+	color: var(--muted) !important;
+	flex: 1;
+}
+
+.pool-legend {
+	display: flex;
+	justify-content: space-between;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--muted);
+	margin-bottom: 14px;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── 按鈕 ─────────────────────────────────────────── */
+.actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.actions form {
+	display: contents;
+}
+
+.b {
+	font-family: inherit;
+	font-size: 14px;
+	font-weight: 600;
+	padding: 11px 16px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	cursor: pointer;
+	flex: 1;
+	min-width: 110px;
+}
+.b:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.b-go {
+	background: var(--ok);
+	color: #fff;
+}
+.b-lock {
+	background: var(--wait, #96650c);
+	color: #fff;
+}
+.b-blue {
+	background: var(--blue);
+	color: #fff;
+}
+.b-red {
+	background: var(--red);
+	color: #fff;
+}
+.b-quiet {
+	background: transparent;
+	color: var(--muted);
+	border-color: var(--line);
+}
+
+/* ── 狀態標籤 ─────────────────────────────────────── */
+.tag {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.1em;
+	padding: 3px 9px;
+	border-radius: 4px;
+	white-space: nowrap;
+	border: 1px solid;
+}
+.t-pending {
+	color: var(--muted);
+	border-color: var(--line);
+}
+.t-open {
+	color: var(--ok);
+	border-color: var(--ok);
+}
+.t-locked {
+	color: var(--wait, #96650c);
+	border-color: var(--wait, #96650c);
+}
+.t-settled {
+	color: var(--blue);
+	border-color: var(--blue);
+}
+.t-void {
+	color: var(--red);
+	border-color: var(--red);
+}
+
+/* ── 表單 ─────────────────────────────────────────── */
+.panel {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 18px 20px;
+	margin-bottom: 20px;
+}
+
+.field-row {
+	display: flex;
+	gap: 12px;
+	align-items: flex-end;
+	flex-wrap: wrap;
+}
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.field label {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.12em;
+	color: var(--muted);
+}
+.field select,
+.field input {
+	font-family: inherit;
+	font-size: 15px;
+	padding: 9px 11px;
+	border-radius: 6px;
+	border: 1px solid var(--line);
+	background: var(--paper);
+	color: var(--ink);
+	min-width: 120px;
+}
+
+/* ── 結算預覽（危險動作前的確認）────────────────────── */
+.confirm {
+	border: 2px solid var(--red);
+	border-radius: 8px;
+	padding: 18px 20px;
+	background: var(--surface);
+	margin-bottom: 20px;
+}
+.confirm h3 {
+	margin: 0 0 4px;
+	font-size: 17px;
+	color: var(--red);
+}
+.confirm .warn {
+	font-size: 14px;
+	color: var(--muted);
+	margin: 0 0 14px;
+}
+.confirm table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+	margin-bottom: 16px;
+}
+.confirm th,
+.confirm td {
+	padding: 7px 10px;
+	border-bottom: 1px solid var(--line);
+	text-align: left;
+}
+.confirm th {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.1em;
+	color: var(--muted);
+	font-weight: 500;
+}
+.confirm td.n {
+	text-align: right;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.err {
+	background: var(--red);
+	color: #fff;
+	padding: 12px 16px;
+	border-radius: 6px;
+	margin-bottom: 18px;
+	font-size: 14.5px;
+}
+
+.ok-msg {
+	background: var(--ok);
+	color: #fff;
+	padding: 12px 16px;
+	border-radius: 6px;
+	margin-bottom: 18px;
+	font-size: 14.5px;
+}
+
+.log {
+	font-size: 13px;
+	font-family: var(--mono);
+	color: var(--muted);
+	line-height: 1.9;
+}
+.log b {
+	color: var(--ink);
+	font-weight: 500;
+}
