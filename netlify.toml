@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "build"
+
+[build.environment]
+  # 專案需要 Node 22 以上（見 package.json 的 engines）
+  NODE_VERSION = "22"
+
+# 立繪是內容雜湊過的檔名，可以長期快取
+[[headers]]
+  for = "/participants/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800, immutable"
+
+# 看板與排行榜端點的快取由程式碼自己設（見 src/routes/api/*），
+# 刻意不在這裡覆寫 —— 那是規格書 §09 的核心，寫在程式碼裡比較不會被誤改。

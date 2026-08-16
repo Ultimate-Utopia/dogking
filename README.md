@@ -65,6 +65,92 @@ npm run dev
 
 ---
 
+## 部署到 Netlify
+
+### 1. 建立雲端資料庫
+
+到 [Supabase](https://supabase.com) 或 [Neon](https://neon.tech) 開一個免費專案，地區選 **Tokyo 或 Singapore**。
+
+> ⚠️ **一定要用「連線池（pooler / pooled）」那組連線字串**，不是 direct connection。
+> Netlify Functions 每次呼叫都可能是獨立執行環境，各自開連線，
+> 直連很快就會打爆資料庫的連線上限。
+> Supabase 的 pooler 是 **6543 埠**（direct 是 5432）。
+>
+> 程式已針對這種連線池模式設定 `prepare: false`（見 `src/lib/server/db/index.ts` 的註解）。
+
+### 2. 建立資料表
+
+在本機對正式資料庫跑 migration：
+
+```bash
+DATABASE_URL="<正式站的連線字串>" npx drizzle-kit migrate
+```
+
+再建立參賽者與場次：
+
+```bash
+node scripts/seed.mjs --url "<正式站的連線字串>"
+```
+
+> Migration 刻意**不放進 Netlify 的建置流程**。建置可能同時跑好幾個、
+> 也可能被回滾，讓它動結構是自找麻煩。手動執行才看得到結果。
+
+### 3. Discord 應用程式
+
+到 [Discord Developers](https://discord.com/developers/applications) → 你的應用程式 → OAuth2：
+
+1. **Redirects** 新增正式站網址：`https://<你的站>.netlify.app/auth/callback`
+   （本機那組 `http://localhost:5173/auth/callback` 保留，兩個可以並存）
+2. 按 **Reset Secret** 產生新的 Client Secret
+
+> 🔑 **上線用的 Secret 必須是新的一組。** 開發期間用過的那組不要沿用到正式站。
+
+### 4. Netlify 設定
+
+建立站台後，到 **Site configuration → Environment variables** 填入：
+
+| 變數 | 值 |
+| --- | --- |
+| `DATABASE_URL` | 步驟 1 的**連線池**字串 |
+| `DISCORD_CLIENT_ID` | Discord 應用程式的 Client ID |
+| `DISCORD_CLIENT_SECRET` | 步驟 3 **重置後**的新 Secret |
+| `DISCORD_REDIRECT_URI` | `https://<你的站>.netlify.app/auth/callback` |
+| `SIGNUP_BONUS` | `1000` |
+
+`netlify.toml` 已經設好建置指令與 Node 版本，不需要在介面上另外指定。
+
+### 5. 部署
+
+```bash
+npx netlify-cli deploy --prod
+```
+
+或把專案推上 GitHub，在 Netlify 連結該儲存庫 —— 之後每次 push 就自動部署，長期比較好用。
+
+### 6. 指定第一位管理員
+
+正式站上 `/dev/make-admin` 會回 404（刻意的）。請本人先用 Discord 登入一次，然後：
+
+```bash
+node scripts/seed.mjs --url "<正式站連線字串>" --admin "<你的 Discord 使用者 ID>"
+```
+
+Discord 使用者 ID 的取得方式：Discord 設定 → 進階 → 開啟開發者模式，
+然後在自己的名字上按右鍵 → 複製使用者 ID。
+
+### 上線後檢查
+
+| 檢查項目 | 預期 |
+| --- | --- |
+| `/` | 看得到賽事看板與立繪 |
+| `/auth/login` | 導向 Discord 且能登入回來 |
+| `/dev/seed`、`/dev/demo`、`/dev/selftest` | **全部 404** |
+| `/overlay` | 疊圖正常，背景透明 |
+| `/api/board` 的回應標頭 | 含 `Cache-Control: public, max-age=3` |
+| `/api/me` 的回應標頭 | 含 `private, no-store` |
+
+---
+
 ## 直播疊圖（OBS）
 
 副台解說賭盤時用的透明疊圖，網址是 `/overlay`。
