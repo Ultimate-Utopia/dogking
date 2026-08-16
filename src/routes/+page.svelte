@@ -157,18 +157,63 @@
 		idemKey = crypto.randomUUID();
 	}
 
-	async function refresh() {
+	/**
+	 * 已結算／已取消的盤口指紋，用來偵測「剛剛派彩了」。
+	 * 看板反正每 3 秒都會拿到，比對一下就知道要不要更新餘額。
+	 */
+	let settledMark = $state('');
+
+	function markOf(list: typeof board.markets) {
+		return list
+			.filter((m) => m.state === 'settled' || m.state === 'void')
+			.map((m) => m.id)
+			.sort()
+			.join(',');
+	}
+
+	/**
+	 * 個人資料。
+	 *
+	 * ⚠️ 不要把這個放進定時輪詢。
+	 *
+	 * /api/me 回的是個人餘額，必須 no-store，所以每次呼叫都會叫起一個
+	 * Function —— 不像看板那樣所有人共用一份 CDN 快取。若每 3 秒問一次，
+	 * 300 人的活動就是 180 萬次呼叫，而 Netlify 免費額度是 12.5 萬次／月。
+	 *
+	 * 餘額只有三種情況會變：開啟頁面、自己下注、盤口派彩。
+	 * 事件驅動不但省下 99% 的呼叫，反應還更快（下注完立刻更新，不用等輪詢）。
+	 */
+	async function refreshMe() {
 		try {
-			const [b, l, m] = await Promise.all([
+			me = await fetch('/api/me').then((r) => r.json());
+		} catch {
+			// 失敗就沿用上一次的資料，下次事件再更新
+		} finally {
+			meLoaded = true;
+		}
+	}
+
+	/** 看板與排行榜。這兩支都有 CDN 快取，定時輪詢的成本可忽略。 */
+	async function refreshBoard() {
+		try {
+			const [b, l] = await Promise.all([
 				fetch('/api/board').then((r) => r.json()),
-				fetch('/api/leaderboard').then((r) => r.json()),
-				fetch('/api/me').then((r) => r.json())
+				fetch('/api/leaderboard').then((r) => r.json())
 			]);
 			polledBoard = b;
 			polledLeaderboard = l.rows;
-			me = m;
-			meLoaded = true;
 			clockSkew = new Date(b.now).getTime() - Date.now();
+
+			// 有盤口結算或取消 → 派彩或退款發生了 → 這時才去看餘額。
+			//
+			// 基準值在 onMount 就設好了，所以這裡任何變化都是真的發生了事情。
+			// 不要再加「基準值非空才比對」之類的防呆 —— 頁面開啟時若剛好
+			// 一個已結算盤口都沒有，那種寫法會把第一次派彩整個吃掉。
+			const mark = markOf(b.markets);
+			if (mark !== settledMark) {
+				settledMark = mark;
+				refreshMe();
+			}
 		} catch {
 			// 網路瞬斷不需要打擾使用者，下一次輪詢會補上
 		}
@@ -177,10 +222,13 @@
 	onMount(() => {
 		newKey();
 		clockSkew = new Date(board.now).getTime() - Date.now();
-		refresh();
+		settledMark = markOf(board.markets);
 
-		// 看板每 3 秒更新一次（回應由 CDN 快取，見 /api/board 的註解）
-		const poll = setInterval(refresh, 3000);
+		refreshMe();
+		refreshBoard();
+
+		// 只有看板在輪詢（回應由 CDN 快取，見 /api/board 的註解）
+		const poll = setInterval(refreshBoard, 3000);
 		// 倒數每秒重畫，但不打伺服器
 		const clock = setInterval(() => (tick = Date.now()), 1000);
 
@@ -196,7 +244,9 @@
 			stake = 0;
 			pickedSide = null;
 			newKey();
-			refresh();
+			// 錢剛扣掉，立刻更新餘額與彩池
+			refreshMe();
+			refreshBoard();
 		}
 		if (form?.error) confirming = false;
 	});
