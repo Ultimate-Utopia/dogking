@@ -1,9 +1,16 @@
 <script lang="ts">
-	import '../app.css';
-
+	/**
+	 * 根 layout 刻意保持空的。
+	 *
+	 * 三個區塊的版面需求完全不同：
+	 *   前台   置中容器 + 深淺色主題
+	 *   後台   較寬的工作區
+	 *   疊圖   透明背景、無容器、固定深色配色
+	 *
+	 * 若在這裡套用共用容器，疊圖會被塞進置中框裡而無法貼齊畫面邊緣，
+	 * 後台也會被前台的寬度限制壓縮。因此樣式一律由各區塊自己載入。
+	 */
 	let { children } = $props();
 </script>
 
-<div class="wrap">
-	{@render children()}
-</div>
+{@render children()}

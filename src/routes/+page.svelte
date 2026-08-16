@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
+	import '../app.css';
 	import './board.css';
 	import type { PageData, ActionData } from './$types';
 
