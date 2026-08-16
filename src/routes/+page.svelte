@@ -67,6 +67,34 @@
 		!!data.user && !!activeMarket && activeMarket.state === 'open' && !!pickedSide && stake > 0 && stake <= balance
 	);
 
+	/**
+	 * 我在某個盤口上的持倉，同一邊的多筆合併成一列。
+	 *
+	 * 觀眾常常分好幾次加碼，只列原始注單會很難看出「我到底押了多少」。
+	 */
+	function myPositions(marketId: number) {
+		const rows = myBets.filter((b) => b.marketId === marketId);
+		const out: Array<{ side: 'blue' | 'red'; amount: number; payout: number; state: string }> = [];
+
+		for (const side of ['blue', 'red'] as const) {
+			const same = rows.filter((r) => r.side === side);
+			if (!same.length) continue;
+			out.push({
+				side,
+				amount: same.reduce((a, b) => a + b.amount, 0),
+				payout: same.reduce((a, b) => a + b.payout, 0),
+				state: same[0].state
+			});
+		}
+		return out;
+	}
+
+	/** 依「目前」彩池估算持倉可領回多少。彩池已含自己的注，所以直接算即可。 */
+	function positionEstimate(m: (typeof board.markets)[number], side: 'blue' | 'red', amount: number) {
+		const pool = side === 'blue' ? m.poolBlue : m.poolRed;
+		return pool > 0 ? Math.floor((amount * m.total) / pool) : 0;
+	}
+
 	function addChip(v: number) {
 		if (stake + v <= balance) stake += v;
 		else stake = balance;
@@ -251,11 +279,44 @@
 						<span>{m.total > 0 ? Math.round((m.poolRed / m.total) * 100) : 0}%</span>
 					</div>
 
+					{#if data.user}
+						{@const mine = myPositions(m.id)}
+						{#if mine.length > 0}
+							<div class="mine">
+								<div class="mine-t">你的押注</div>
+								{#each mine as p (p.side)}
+									{@const nm = p.side === 'blue' ? c.blueName : c.redName}
+									<div class="mine-row">
+										<span class="mine-side {p.side}">
+											{nm ?? (p.side === 'blue' ? '藍方' : '紅方')}
+										</span>
+										<span class="mine-amt">{fmt(p.amount)}</span>
+										<span class="mine-out">
+											{#if p.state === 'pending'}
+												預估領回 {fmt(positionEstimate(m, p.side, p.amount))}
+											{:else if p.state === 'won'}
+												<span style="color:var(--ok)">獲勝，領回 {fmt(p.payout)}</span>
+											{:else if p.state === 'lost'}
+												<span style="color:var(--red)">未中</span>
+											{:else}
+												已退款
+											{/if}
+										</span>
+									</div>
+								{/each}
+								{#if m.state === 'open'}
+									<p class="mine-note">預估值會隨其他人下注而變動，最終依封盤後的彩池計算。</p>
+								{/if}
+							</div>
+						{/if}
+					{/if}
+
 					{#if m.state === 'open'}
 						<div class="betbox">
 							{#if !data.user}
 								<p class="closed-note">登入後即可下注</p>
 							{:else}
+								{@const held = myPositions(m.id)}
 								<div class="sides">
 									<button
 										class="side-btn b {isActive && pickedSide === 'blue' ? 'on' : ''}"
@@ -264,7 +325,8 @@
 											pickedSide = 'blue';
 										}}
 									>
-										支持 {c.blueName ?? '藍方'}
+										{held.some((p) => p.side === 'blue') ? '加碼' : '支持'}
+										{c.blueName ?? '藍方'}
 									</button>
 									<button
 										class="side-btn r {isActive && pickedSide === 'red' ? 'on' : ''}"
@@ -273,7 +335,8 @@
 											pickedSide = 'red';
 										}}
 									>
-										支持 {c.redName ?? '紅方'}
+										{held.some((p) => p.side === 'red') ? '加碼' : '支持'}
+										{c.redName ?? '紅方'}
 									</button>
 								</div>
 

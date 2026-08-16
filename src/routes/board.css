@@ -229,6 +229,59 @@
 	font-variant-numeric: tabular-nums;
 }
 
+/* ── 我的押注（盤口卡內）────────────────────────────
+   觀眾最想知道的是「我押了哪邊、押多少、現在值多少」。
+   放在盤口卡上，不必捲到最下面的紀錄去反推。 */
+.mine {
+	margin-top: 14px;
+	padding: 12px 14px;
+	background: var(--paper);
+	border-radius: 8px;
+	border: 1px dashed var(--line);
+}
+.mine-t {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.14em;
+	color: var(--muted);
+	margin-bottom: 8px;
+}
+.mine-row {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 4px 0;
+	font-size: 14.5px;
+}
+.mine-side {
+	font-weight: 700;
+}
+.mine-side.blue {
+	color: var(--blue);
+}
+.mine-side.red {
+	color: var(--red);
+}
+.mine-amt {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+.mine-out {
+	margin-left: auto;
+	font-family: var(--mono);
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+}
+.mine-note {
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: var(--muted);
+	line-height: 1.6;
+}
+
 /* ── 下注區 ───────────────────────────────────────── */
 .betbox {
 	margin-top: 16px;
