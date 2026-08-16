@@ -8,6 +8,20 @@
       "when": 1786885561641,
       "tag": "0000_nebulous_mister_fear",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786888642214,
+      "tag": "0001_add_participants",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786888661117,
+      "tag": "0002_drop_legacy_match_user_fks",
+      "breakpoints": true
     }
   ]
 }

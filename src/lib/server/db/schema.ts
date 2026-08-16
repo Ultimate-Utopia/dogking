@@ -66,6 +66,29 @@ export const sessions = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────
+// participants —— 9 位參賽主播
+//
+// 刻意與 users 分開：參賽者是「賽事實體」（有頻道、立繪、戰績），
+// users 是「觀眾帳號」（Discord 登入建立）。主播不一定會註冊網站帳號，
+// 硬塞進 users 就得偽造 discord_id。
+//
+// 若某位主播同時也是觀眾（規格書決策 E：參賽者可下注），
+// 那是另一筆獨立的 users 資料，以 users.is_participant 標記。
+// ─────────────────────────────────────────────────────────
+export const participants = pgTable('participants', {
+	id: serial('id').primaryKey(),
+	name: text('name').notNull(),
+	/** 頻道連結，賽況資訊區點擊導向 */
+	channelUrl: text('channel_url'),
+	avatarUrl: text('avatar_url'),
+	/** DORO 化立繪，等繪師交件後填入。未到齊前前端用佔位圖。 */
+	doroImageUrl: text('doro_image_url'),
+	/** 顯示順序 */
+	orderNo: integer('order_no').notNull().default(0),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+// ─────────────────────────────────────────────────────────
 // matches —— 場次 1～13（含條件觸發的加賽）
 // ─────────────────────────────────────────────────────────
 export const matches = pgTable('matches', {
@@ -77,10 +100,12 @@ export const matches = pgTable('matches', {
 	roundLabel: text('round_label').notNull(),
 	/** BO1 | BO3 | BO5 */
 	format: text('format').notNull(),
+	/** 輸者淘汰（規格書：場次 7～11、12、13） */
+	isElimination: boolean('is_elimination').notNull().default(false),
 
 	/** 對戰雙方。雙敗淘汰下，晚期場次要等前面打完才確定，因此可為 null。 */
-	blueUserId: uuid('blue_user_id').references(() => users.id),
-	redUserId: uuid('red_user_id').references(() => users.id),
+	blueParticipantId: integer('blue_participant_id').references(() => participants.id),
+	redParticipantId: integer('red_participant_id').references(() => participants.id),
 
 	/** pending | live | done | void */
 	state: text('state').notNull().default('pending'),
@@ -106,8 +131,13 @@ export const markets = pgTable(
 
 		/** match = 整場盤，game = 小局盤 */
 		type: text('type').notNull(),
-		/** 小局盤的局數（1 起算）。整場盤為 null。 */
-		gameNo: integer('game_no'),
+		/**
+		 * 0 = 整場盤，1 以上 = 第 N 小局。
+		 *
+		 * 刻意用 0 而非 NULL：Postgres 唯一索引把 NULL 視為互不相同，
+		 * 若整場盤的 game_no 是 NULL，下面的唯一索引就擋不住重複建立。
+		 */
+		gameNo: integer('game_no').notNull().default(0),
 
 		/** pending | open | locked | settled | void */
 		state: text('state').notNull().default('pending'),
