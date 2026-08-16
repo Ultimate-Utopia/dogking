@@ -35,11 +35,20 @@ export class PurchaseError extends Error {
 // 公開代碼
 // ─────────────────────────────────────────────────────────
 
-/** 產生一組沒被用過的公開代碼。碰撞就重試。 */
-export async function generatePublicCode(): Promise<string> {
+/** Drizzle 交易物件，或頂層 db。 */
+type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * 產生一組沒被用過的公開代碼。碰撞就重試。
+ *
+ * ⚠️ 在交易裡呼叫時務必把 tx 傳進來。
+ * 用頂層的 db 會另外向連線池要一條連線，而外層交易正握著一條 ——
+ * 連線池滿的時候（serverless 的 max 設得很小）就會互相等待而卡死。
+ */
+export async function generatePublicCode(tx: Executor = db): Promise<string> {
 	for (let i = 0; i < 20; i++) {
 		const code = randomCode(6);
-		const [taken] = await db.select().from(users).where(eq(users.publicCode, code)).limit(1);
+		const [taken] = await tx.select().from(users).where(eq(users.publicCode, code)).limit(1);
 		if (!taken) return code;
 	}
 	throw new PurchaseError('無法產生公開代碼，請再試一次');

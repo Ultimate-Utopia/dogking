@@ -1,25 +1,32 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { getBalance } from '$lib/server/ledger';
-import { getBoardState, getLeaderboard, getMyBets, getRoster } from '$lib/server/board';
+import { getBoardState, getLeaderboard, getRoster } from '$lib/server/board';
 import { placeBet } from '$lib/server/tournament';
 import { InsufficientBalanceError } from '$lib/server/ledger';
 
-export const load: PageServerLoad = async ({ locals }) => {
-	// 首次載入走 SSR，之後由前端輪詢 /api/board 更新。
-	//
-	// ⚠️ 全部包在同一個 Promise.all 裡，不要拆成兩段 await。
-	// 正式站的 Function 與資料庫可能不在同一區，每次往返 200ms 以上，
-	// 序列化執行會讓首頁直接超時（見 board.ts 裡的說明）。
-	const [board, leaderboard, roster, balance, myBets] = await Promise.all([
+/**
+ * 首頁只回傳「所有人都一樣」的資料，讓整頁可以被 CDN 快取。
+ *
+ * ⚠️ 絕對不要把餘額或個人下注紀錄加回這裡。
+ *
+ * 原本這裡會一併載入使用者資料，導致整頁無法快取 —— 每個觀眾的每次
+ * 重新整理都會叫起一個 Function 並開資料庫連線。實測下來首頁的失敗率
+ * 高達 35%（連線池被打爆後請求排隊到逾時），而同樣資料量、
+ * 但有 3 秒快取的 /api/board 則是 20/20 全部成功。
+ *
+ * 個人資料改由前端向 /api/me 取得（那支是 private, no-store）。
+ * 代價是登入狀態會在 JS 載入後才出現，換來的是整站扛得住活動當天的流量。
+ */
+export const load: PageServerLoad = async ({ setHeaders }) => {
+	const [board, leaderboard, roster] = await Promise.all([
 		getBoardState(),
 		getLeaderboard(5),
-		getRoster(),
-		locals.user ? getBalance(locals.user.id) : Promise.resolve(0),
-		locals.user ? getMyBets(locals.user.id, 30) : Promise.resolve([])
+		getRoster()
 	]);
 
-	return { board, leaderboard, roster, user: locals.user, balance, myBets };
+	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=10' });
+
+	return { board, leaderboard, roster };
 };
 
 export const actions: Actions = {

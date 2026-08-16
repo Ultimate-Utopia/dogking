@@ -52,6 +52,39 @@ export interface DiscordProfile {
 	avatarUrl: string | null;
 }
 
+/**
+ * Discord 回報的錯誤。
+ *
+ * 刻意把 Discord 的錯誤代碼帶出來 —— 那不是機密，卻是唯一能分辨
+ * 「Secret 填錯」與「redirect_uri 對不上」的線索。少了它，
+ * 上線後只會看到一個沒有內容的 500，完全無從查起。
+ */
+export class DiscordAuthError extends Error {
+	constructor(
+		message: string,
+		public readonly step: 'token' | 'profile',
+		public readonly status: number,
+		public readonly code?: string
+	) {
+		super(message);
+		this.name = 'DiscordAuthError';
+	}
+}
+
+/** 把 Discord 的錯誤代碼翻成可以直接照做的說明。 */
+function explain(code: string | undefined, status: number): string {
+	switch (code) {
+		case 'invalid_client':
+			return 'Client Secret 不正確 —— 請確認部署環境的 DISCORD_CLIENT_SECRET 與 Discord 後台目前的一致（重置過就要同步更新）。';
+		case 'invalid_grant':
+			return '授權碼無效或已使用過，也可能是 DISCORD_REDIRECT_URI 與 Discord 後台登記的不完全相同。';
+		case 'invalid_request':
+			return '請求缺少必要參數，請檢查 DISCORD_CLIENT_ID 是否有填。';
+		default:
+			return `Discord 回報錯誤（HTTP ${status}${code ? `，${code}` : ''}）。`;
+	}
+}
+
 /** 用授權碼換 token，再換使用者資料。 */
 export async function exchangeCodeForProfile(code: string): Promise<DiscordProfile> {
 	const { clientId, clientSecret, redirectUri } = requireConfig();
@@ -69,7 +102,14 @@ export async function exchangeCodeForProfile(code: string): Promise<DiscordProfi
 	});
 
 	if (!tokenRes.ok) {
-		throw new Error(`Discord token 交換失敗（${tokenRes.status}）：${await tokenRes.text()}`);
+		// 回應內容只有錯誤代碼，不含我們送出去的憑證
+		let errCode: string | undefined;
+		try {
+			errCode = ((await tokenRes.json()) as { error?: string }).error;
+		} catch {
+			errCode = undefined;
+		}
+		throw new DiscordAuthError(explain(errCode, tokenRes.status), 'token', tokenRes.status, errCode);
 	}
 
 	const { access_token } = (await tokenRes.json()) as { access_token: string };
@@ -79,7 +119,11 @@ export async function exchangeCodeForProfile(code: string): Promise<DiscordProfi
 	});
 
 	if (!userRes.ok) {
-		throw new Error(`讀取 Discord 使用者失敗（${userRes.status}）`);
+		throw new DiscordAuthError(
+			`取得 Discord 使用者資料失敗（HTTP ${userRes.status}）。`,
+			'profile',
+			userRes.status
+		);
 	}
 
 	const user = (await userRes.json()) as {

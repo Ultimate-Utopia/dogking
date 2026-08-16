@@ -55,7 +55,7 @@ export async function upsertUserFromDiscord(profile: DiscordProfile): Promise<Se
 				.set({
 					displayName: profile.displayName,
 					avatarUrl: profile.avatarUrl,
-					publicCode: existing.publicCode ?? (await generatePublicCode())
+					publicCode: existing.publicCode ?? (await generatePublicCode(tx))
 				})
 				.where(eq(users.id, existing.id))
 				.returning();
@@ -68,7 +68,7 @@ export async function upsertUserFromDiscord(profile: DiscordProfile): Promise<Se
 				discordId: profile.discordId,
 				displayName: profile.displayName,
 				avatarUrl: profile.avatarUrl,
-				publicCode: await generatePublicCode()
+				publicCode: await generatePublicCode(tx)
 			})
 			.returning();
 

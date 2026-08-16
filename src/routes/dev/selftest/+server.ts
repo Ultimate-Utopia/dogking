@@ -22,7 +22,12 @@ import {
 	lockUser,
 	InsufficientBalanceError
 } from '$lib/server/ledger';
-import { createSession, resolveSession, destroySession } from '$lib/server/auth';
+import {
+	createSession,
+	resolveSession,
+	destroySession,
+	upsertUserFromDiscord
+} from '$lib/server/auth';
 import {
 	openMarket,
 	lockMarket,
@@ -548,6 +553,40 @@ export const GET: RequestHandler = async () => {
 					bad.length === 0
 						? `${cases.length} 種寫法全部正確辨識`
 						: `失敗：${bad.map(([i]) => i).join('、')}`
+			});
+		}
+		// ── 18. Discord 回來之後的建立流程 ──────────────────
+		// 這是登入時 Discord 授權完之後跑的路徑：建立帳號、發註冊獎勵、
+		// 產生公開代碼，全部在同一個交易裡。
+		// 之前沒有測試覆蓋，而它一旦卡住，使用者看到的就是「授權後一直轉」。
+		{
+			const discordId = `selftest-oauth-${crypto.randomUUID()}`;
+			const profile = { discordId, displayName: '登入測試', avatarUrl: null };
+
+			const first = await upsertUserFromDiscord(profile);
+			createdIds.push(first.id);
+
+			const balanceAfterSignup = await getBalance(first.id);
+
+			// 同一個人再登入一次不該重複發獎勵，也不該換掉公開代碼
+			const second = await upsertUserFromDiscord({ ...profile, displayName: '改了暱稱' });
+			const balanceAfterRelogin = await getBalance(second.id);
+
+			results.push({
+				name: 'Discord 授權後的帳號建立流程',
+				pass:
+					first.id === second.id &&
+					!!first.publicCode &&
+					first.publicCode.length === 6 &&
+					first.publicCode === second.publicCode &&
+					balanceAfterSignup === 1000 &&
+					balanceAfterRelogin === 1000 &&
+					second.displayName === '改了暱稱',
+				detail:
+					`公開代碼 ${first.publicCode}、` +
+					`註冊贈送 ${balanceAfterSignup}、` +
+					`再次登入後仍為 ${balanceAfterRelogin}（不重複發放）、` +
+					`暱稱已同步為「${second.displayName}」`
 			});
 		}
 	} finally {

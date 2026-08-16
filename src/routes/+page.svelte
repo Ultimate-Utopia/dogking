@@ -18,13 +18,39 @@
 	 */
 	let polledBoard = $state<typeof data.board | null>(null);
 	let polledLeaderboard = $state<typeof data.leaderboard | null>(null);
-	let polledBalance = $state<number | null>(null);
-	let polledBets = $state<typeof data.myBets | null>(null);
 
 	const board = $derived(polledBoard ?? data.board);
 	const leaderboard = $derived(polledLeaderboard ?? data.leaderboard);
-	const balance = $derived(polledBalance ?? data.balance);
-	const myBets = $derived(polledBets ?? data.myBets);
+
+	/**
+	 * 個人資料一律由前端取得。
+	 *
+	 * 首頁的 HTML 會被 CDN 快取後送給所有人，所以伺服器端渲染不能含任何
+	 * 個人資訊（見 +page.server.ts 的說明）。代價是登入狀態會晚一步出現。
+	 */
+	interface Me {
+		user: { displayName: string; avatarUrl: string | null; isAdmin: boolean } | null;
+		balance: number;
+		bets: Array<{
+			id: number;
+			side: string;
+			amount: number;
+			state: string;
+			payout: number;
+			marketId: number;
+			label: string;
+			matchOrderNo: number;
+			net: number;
+		}>;
+	}
+
+	let me = $state<Me | null>(null);
+	/** 還沒問到 /api/me 之前不要急著顯示「請登入」，避免登入者看到閃爍 */
+	let meLoaded = $state(false);
+
+	const user = $derived(me?.user ?? null);
+	const balance = $derived(me?.balance ?? 0);
+	const myBets = $derived(me?.bets ?? []);
 
 	/** 伺服器與瀏覽器的時鐘差。倒數一律以伺服器時間為基準。 */
 	let clockSkew = $state(0);
@@ -77,7 +103,7 @@
 	});
 
 	const canBet = $derived(
-		!!data.user && !!activeMarket && activeMarket.state === 'open' && !!pickedSide && stake > 0 && stake <= balance
+		!!user && !!activeMarket && isOpen(activeMarket) && !!pickedSide && stake > 0 && stake <= balance
 	);
 
 	/**
@@ -133,19 +159,16 @@
 
 	async function refresh() {
 		try {
-			const [b, l] = await Promise.all([
+			const [b, l, m] = await Promise.all([
 				fetch('/api/board').then((r) => r.json()),
-				fetch('/api/leaderboard').then((r) => r.json())
+				fetch('/api/leaderboard').then((r) => r.json()),
+				fetch('/api/me').then((r) => r.json())
 			]);
 			polledBoard = b;
 			polledLeaderboard = l.rows;
+			me = m;
+			meLoaded = true;
 			clockSkew = new Date(b.now).getTime() - Date.now();
-
-			if (data.user) {
-				const me = await fetch('/api/me').then((r) => r.json());
-				polledBalance = me.balance;
-				polledBets = me.bets;
-			}
 		} catch {
 			// 網路瞬斷不需要打擾使用者，下一次輪詢會補上
 		}
@@ -154,6 +177,7 @@
 	onMount(() => {
 		newKey();
 		clockSkew = new Date(board.now).getTime() - Date.now();
+		refresh();
 
 		// 看板每 3 秒更新一次（回應由 CDN 快取，見 /api/board 的註解）
 		const poll = setInterval(refresh, 3000);
@@ -192,13 +216,13 @@
 <div class="topbar">
 	<div class="topbar-in">
 		<a class="brand" href="/">終焉狗王大賽</a>
-		{#if data.user}
+		{#if user}
 			<div class="purse">
-				<span class="who">{data.user.displayName}</span>
+				<span class="who">{user.displayName}</span>
 				<span class="coins">{fmt(balance)}</span>
 				<span class="who">狗狗幣</span>
 				<a href="/coins">獲得狗狗幣</a>
-				{#if data.user.isAdmin}<a href="/admin">後台</a>{/if}
+				{#if user.isAdmin}<a href="/admin">後台</a>{/if}
 				<form method="POST" action="/auth/logout" style="display:inline">
 					<button
 						type="submit"
@@ -216,7 +240,7 @@
 	{#if form?.success}<div class="msg-ok">{form.success}</div>{/if}
 	{#if form?.error}<div class="msg-err">{form.error}</div>{/if}
 
-	{#if !data.user}
+	{#if meLoaded && !user}
 		<div class="card2" style="margin-bottom:16px">
 			<h2>還沒加入？</h2>
 			<p style="margin:0 0 6px">用 Discord 登入即可領取 1,000 狗狗幣，馬上開始下注。</p>
@@ -313,7 +337,7 @@
 						<span>{m.total > 0 ? Math.round((m.poolRed / m.total) * 100) : 0}%</span>
 					</div>
 
-					{#if data.user}
+					{#if user}
 						{@const mine = myPositions(m.id)}
 						{#if mine.length > 0}
 							<div class="mine">
@@ -347,7 +371,7 @@
 
 					{#if isOpen(m)}
 						<div class="betbox">
-							{#if !data.user}
+							{#if meLoaded && !user}
 								<p class="closed-note">登入後即可下注</p>
 							{:else}
 								{@const held = myPositions(m.id)}
@@ -460,7 +484,7 @@
 
 		<div class="card2">
 			<h2>我的下注紀錄</h2>
-			{#if !data.user}
+			{#if meLoaded && !user}
 				<p style="margin:0;color:var(--muted)">登入後顯示。</p>
 			{:else}
 				{#each myBets as b (b.id)}
