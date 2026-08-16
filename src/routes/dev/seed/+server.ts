@@ -6,7 +6,7 @@
  */
 
 import { json, error } from '@sveltejs/kit';
-import { dev } from '$app/environment';
+import { requireLocalDev } from '$lib/server/dev-guard';
 import { asc, eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
@@ -14,7 +14,7 @@ import { participants, matches } from '$lib/server/db/schema';
 import { ROSTER, MATCHES } from '$lib/data/roster.js';
 
 export const GET: RequestHandler = async () => {
-	if (!dev) error(404, 'Not found');
+	requireLocalDev();
 
 	const existingP = await db.select().from(participants);
 	const existingM = await db.select().from(matches);

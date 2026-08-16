@@ -12,7 +12,7 @@
  */
 
 import { json, error } from '@sveltejs/kit';
-import { dev } from '$app/environment';
+import { requireLocalDev } from '$lib/server/dev-guard';
 import { eq, inArray, asc } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
@@ -81,7 +81,7 @@ async function ensureDemoUser(key: string, name: string, funds: number) {
 }
 
 export const GET: RequestHandler = async ({ url, locals }) => {
-	if (!dev) error(404, 'Not found');
+	requireLocalDev();
 
 	if (url.searchParams.get('reset')) {
 		return json(await reset());

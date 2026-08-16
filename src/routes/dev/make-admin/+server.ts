@@ -5,14 +5,14 @@
  */
 
 import { json, error } from '@sveltejs/kit';
-import { dev } from '$app/environment';
+import { requireLocalDev } from '$lib/server/dev-guard';
 import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/db/schema';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!dev) error(404, 'Not found');
+	requireLocalDev();
 	if (!locals.user) error(401, '請先登入再呼叫這個端點');
 
 	const [updated] = await db

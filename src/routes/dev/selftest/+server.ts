@@ -11,7 +11,7 @@
  */
 
 import { json, error, type Cookies } from '@sveltejs/kit';
-import { dev } from '$app/environment';
+import { requireLocalDev } from '$lib/server/dev-guard';
 import { eq, inArray } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
@@ -72,7 +72,7 @@ interface Result {
 }
 
 export const GET: RequestHandler = async () => {
-	if (!dev) error(404, 'Not found');
+	requireLocalDev();
 
 	const results: Result[] = [];
 	const createdIds: string[] = [];
