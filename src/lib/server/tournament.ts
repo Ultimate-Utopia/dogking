@@ -12,7 +12,7 @@
  * ─────────────────────────────────────────────────────────
  */
 
-import { eq, and, inArray, asc } from 'drizzle-orm';
+import { eq, and, inArray, asc, lte } from 'drizzle-orm';
 import { db } from './db';
 import { markets, bets, matches, users, participants } from './db/schema';
 import { lockUser, writeLedger } from './ledger';
@@ -110,10 +110,31 @@ export async function lockMarket(marketId: number) {
 }
 
 /**
+ * 把倒數已經到期的盤口真正改成 locked。
+ *
+ * scheduleLock 只寫入時間戳，沒有排程器會在時間到時改狀態
+ * （serverless 環境也不該假設有背景工作）。若不補這一步：
+ *   - 前台的 state 還是 open，會繼續顯示下注介面
+ *   - settleMarket 要求 state 必須是 locked，後台反而結算不了
+ *
+ * 因此在每個讀取路徑的開頭呼叫一次，讓狀態自我修正。
+ * 這是一句有索引的 UPDATE，而且看板端點有 3 秒快取，成本可忽略。
+ */
+export async function expireLocks(): Promise<number> {
+	const updated = await db
+		.update(markets)
+		.set({ state: 'locked', lockedAt: new Date() })
+		.where(and(eq(markets.state, 'open'), lte(markets.lockAt, new Date())))
+		.returning({ id: markets.id });
+
+	return updated.length;
+}
+
+/**
  * 設定 N 秒後封盤，前台據此顯示倒數。
  *
- * 注意：這只是「預定時間」。實際擋下注的是 placeBet 裡的伺服器時間檢查，
- * 所以就算沒有排程器把 state 改成 locked，時間一到也下不了注。
+ * 時間一到會由 expireLocks() 把狀態改成 locked。
+ * 即使那之前有人搶送下注，placeBet 也會以伺服器時間擋下。
  */
 export async function scheduleLock(marketId: number, seconds: number) {
 	const lockAt = new Date(Date.now() + seconds * 1000);

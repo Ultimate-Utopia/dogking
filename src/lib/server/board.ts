@@ -13,7 +13,7 @@
 import { eq, and, desc, asc, sql, inArray, ne } from 'drizzle-orm';
 import { db } from './db';
 import { matches, markets, participants, bets, users, ledger } from './db/schema';
-import { calcOdds } from './tournament';
+import { calcOdds, expireLocks } from './tournament';
 
 export interface BoardMarket {
 	id: number;
@@ -90,6 +90,9 @@ async function toBoardMatch(m: typeof matches.$inferSelect): Promise<BoardMatch>
 }
 
 export async function getBoardState() {
+	// 先把倒數到期的盤口改成 locked，否則前台會繼續顯示下注介面
+	await expireLocks();
+
 	const current = await pickCurrentMatch();
 
 	if (!current) {

@@ -1,7 +1,57 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+
+	/**
+	 * 盤口的即時狀態。刻意只更新顯示，不重載整頁 ——
+	 * 操作員可能正在輸入比分，整頁重載會把輸入框蓋掉。
+	 */
+	let live = $state<{ now: string; markets: PageData['markets'] } | null>(null);
+	let clockSkew = $state(0);
+	let tick = $state(Date.now());
+
+	const shownMarkets = $derived(live?.markets ?? data.markets);
+
+	function remaining(lockAt: string | Date | null): number | null {
+		if (!lockAt) return null;
+		const ms = new Date(lockAt).getTime() - (tick + clockSkew);
+		return ms > 0 ? Math.ceil(ms / 1000) : 0;
+	}
+
+	function mmss(sec: number) {
+		return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+	}
+
+	onMount(() => {
+		let lastStates = '';
+
+		const poll = setInterval(async () => {
+			try {
+				const r = await fetch(`/api/admin/match/${data.match.id}`);
+				if (!r.ok) return;
+				const j = await r.json();
+				live = j;
+				clockSkew = new Date(j.now).getTime() - Date.now();
+
+				// 盤口狀態改變時（例如倒數到期自動封盤）才重載，
+				// 好讓按鈕換成對應的動作。彩池變動不需要重載。
+				const states = j.markets.map((m: { id: number; state: string }) => `${m.id}:${m.state}`).join(',');
+				if (lastStates && states !== lastStates) invalidateAll();
+				lastStates = states;
+			} catch {
+				// 瞬斷不必打擾操作員，下次輪詢會補上
+			}
+		}, 3000);
+
+		const clock = setInterval(() => (tick = Date.now()), 1000);
+		return () => {
+			clearInterval(poll);
+			clearInterval(clock);
+		};
+	});
 
 	const fmt = (n: number) => n.toLocaleString('zh-TW');
 	const sideName = (s: string) => (s === 'blue' ? '藍方' : '紅方');
@@ -21,8 +71,8 @@
 		data.participants.find((p) => p.id === data.match.redParticipantId)?.name ?? '紅方'
 	);
 
-	/** 已建立的盤口，依 gameNo 對應 */
-	const marketOf = (gameNo: number) => data.markets.find((m) => m.gameNo === gameNo);
+	/** 已建立的盤口，依 gameNo 對應。優先用輪詢到的即時資料。 */
+	const marketOf = (gameNo: number) => shownMarkets.find((m) => m.gameNo === gameNo);
 
 	/** 整場盤 + 該賽制的所有小局 */
 	const slots = $derived([
@@ -215,7 +265,15 @@
 		<div class="market {state === 'open' ? 'is-open' : ''} {state === 'locked' ? 'is-locked' : ''}">
 			<div class="market-head">
 				<span class="market-title">{slot.label}</span>
-				<span class="tag t-{state}">{STATE_LABEL[state]}</span>
+				<span style="display:flex;gap:8px;align-items:center">
+					{#if m}
+						{@const secs = remaining(m.lockAt)}
+						{#if state === 'open' && secs !== null && secs > 0}
+							<span class="cd">{mmss(secs)}</span>
+						{/if}
+					{/if}
+					<span class="tag t-{state}">{STATE_LABEL[state]}</span>
+				</span>
 			</div>
 
 			{#if m}

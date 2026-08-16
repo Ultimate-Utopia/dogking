@@ -14,6 +14,7 @@ import {
 	updateMatchScore,
 	updateMatchMeta,
 	deleteMatch,
+	expireLocks,
 	calcOdds
 } from '$lib/server/tournament';
 import { requireAdmin, logAdmin } from '$lib/server/admin';
@@ -25,6 +26,9 @@ const MAX_GAMES: Record<string, number> = { BO1: 1, BO3: 3, BO5: 5 };
 export const load: PageServerLoad = async ({ params, url }) => {
 	const matchId = Number(params.id);
 	if (!Number.isInteger(matchId)) error(400, '場次編號無效');
+
+	// 倒數到期的盤口要先變成 locked，否則按「判定勝方」時會因狀態不符而失敗
+	await expireLocks();
 
 	const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
 	if (!match) error(404, '找不到這個場次');

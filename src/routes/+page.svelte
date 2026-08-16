@@ -37,7 +37,19 @@
 
 	const fmt = (n: number) => n.toLocaleString('zh-TW');
 
-	const openMarkets = $derived(board.markets.filter((m) => m.state === 'open'));
+	/**
+	 * 倒數歸零就立刻當成封盤，不等伺服器狀態同步。
+	 *
+	 * /api/board 有 3 秒快取，狀態改成 locked 之後畫面最多還會慢 3 秒。
+	 * 那段空窗期若還顯示下注介面，使用者按下去只會拿到失敗訊息。
+	 */
+	function isOpen(m: (typeof board.markets)[number]) {
+		if (m.state !== 'open') return false;
+		const left = remaining(m.lockAt);
+		return left === null || left > 0;
+	}
+
+	const openMarkets = $derived(board.markets.filter(isOpen));
 
 	const activeMarket = $derived(
 		board.markets.find((m) => m.id === pickedMarket) ?? openMarkets[0] ?? null
@@ -93,6 +105,20 @@
 	function positionEstimate(m: (typeof board.markets)[number], side: 'blue' | 'red', amount: number) {
 		const pool = side === 'blue' ? m.poolBlue : m.poolRed;
 		return pool > 0 ? Math.floor((amount * m.total) / pool) : 0;
+	}
+
+	/**
+	 * 選擇陣營。點已選中的那邊等於取消，讓「改變主意」有路可退。
+	 * 換邊時金額刻意保留 —— 觀眾常常是想比較「同樣的錢押另一邊會怎樣」。
+	 */
+	function pick(marketId: number, side: 'blue' | 'red') {
+		if (pickedMarket === marketId && pickedSide === side) {
+			pickedSide = null;
+			stake = 0;
+			return;
+		}
+		pickedMarket = marketId;
+		pickedSide = side;
 	}
 
 	function addChip(v: number) {
@@ -239,11 +265,11 @@
 				<div class="mk {m.state === 'open' ? 'open' : ''}">
 					<div class="mk-top">
 						<span class="mk-name">{m.label}</span>
-						{#if m.state === 'open' && secs !== null && secs > 0}
+						{#if isOpen(m) && secs !== null && secs > 0}
 							<span class="countdown">{mmss(secs)} 後封盤</span>
-						{:else if m.state === 'open'}
+						{:else if isOpen(m)}
 							<span style="color:var(--ok);font-size:13px">開放下注中</span>
-						{:else if m.state === 'locked'}
+						{:else if m.state === 'locked' || (m.state === 'open' && secs === 0)}
 							<span style="color:var(--red);font-size:13px">已封盤</span>
 						{:else if m.state === 'settled'}
 							<span style="font-size:13px">
@@ -311,7 +337,7 @@
 						{/if}
 					{/if}
 
-					{#if m.state === 'open'}
+					{#if isOpen(m)}
 						<div class="betbox">
 							{#if !data.user}
 								<p class="closed-note">登入後即可下注</p>
@@ -320,25 +346,26 @@
 								<div class="sides">
 									<button
 										class="side-btn b {isActive && pickedSide === 'blue' ? 'on' : ''}"
-										onclick={() => {
-											pickedMarket = m.id;
-											pickedSide = 'blue';
-										}}
+										onclick={() => pick(m.id, 'blue')}
 									>
 										{held.some((p) => p.side === 'blue') ? '加碼' : '支持'}
 										{c.blueName ?? '藍方'}
 									</button>
 									<button
 										class="side-btn r {isActive && pickedSide === 'red' ? 'on' : ''}"
-										onclick={() => {
-											pickedMarket = m.id;
-											pickedSide = 'red';
-										}}
+										onclick={() => pick(m.id, 'red')}
 									>
 										{held.some((p) => p.side === 'red') ? '加碼' : '支持'}
 										{c.redName ?? '紅方'}
 									</button>
 								</div>
+
+								{#if isActive && pickedSide}
+									<p class="switch-hint">
+										想改押另一邊？直接點另一顆按鈕，金額會保留。
+										<button class="linkish" onclick={() => pick(m.id, pickedSide!)}>取消選擇</button>
+									</p>
+								{/if}
 
 								{#if isActive && pickedSide}
 									<div class="chips">
@@ -366,7 +393,7 @@
 								{/if}
 							{/if}
 						</div>
-					{:else if m.state === 'locked'}
+					{:else if m.state === 'locked' || m.state === 'open'}
 						<div class="closed-note">已封盤，等待賽果</div>
 					{/if}
 				</div>

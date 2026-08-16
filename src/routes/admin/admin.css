@@ -228,6 +228,15 @@
 	border-color: var(--line);
 }
 
+/* 後台倒數。操作員要靠這個決定何時判定勝負。 */
+.cd {
+	font-family: var(--mono);
+	font-size: 17px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+	color: var(--red);
+}
+
 /* ── 狀態標籤 ─────────────────────────────────────── */
 .tag {
 	font-family: var(--mono);

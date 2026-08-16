@@ -29,6 +29,8 @@ import {
 	placeBet,
 	settleMarket,
 	voidMarket,
+	scheduleLock,
+	expireLocks,
 	calcOdds,
 	calcPayout,
 	deleteMarketsForMatches
@@ -398,6 +400,62 @@ export const GET: RequestHandler = async () => {
 					`開放中結算${blockedWhileOpen ? '已擋下' : '未擋 —— 有問題'}、` +
 					`重複結算${blockedDouble ? '已擋下' : '未擋 —— 有問題'}、` +
 					`餘額 ${balance}（只派彩一次，期望 1000）`
+			});
+		}
+		// ── 13. 倒數到期會自動封盤 ──────────────────────────
+		// scheduleLock 只寫入時間戳，沒有排程器會改狀態。
+		// 若少了 expireLocks()：前台會繼續顯示下注介面，
+		// 而且 settleMarket 要求 state=locked，後台反而結算不了。
+		{
+			const mid = await makeMatch('expire');
+			const market = await openMarket(mid, 0);
+			const u = await makeFundedUser('expire-u', 1000);
+			await placeBet({ userId: u, marketId: market.id, side: 'blue', amount: 100, idempotencyKey: crypto.randomUUID() });
+
+			// 設定成 1 秒前就該封盤
+			await scheduleLock(market.id, -1);
+			const [before] = await db.select().from(markets).where(eq(markets.id, market.id));
+
+			const expired = await expireLocks();
+			const [after] = await db.select().from(markets).where(eq(markets.id, market.id));
+
+			// 過期後必須能直接結算，不需要人工再按一次封盤
+			let settled = false;
+			try {
+				await settleMarket(market.id, 'blue');
+				settled = true;
+			} catch {
+				settled = false;
+			}
+
+			results.push({
+				name: '倒數到期自動封盤，且可直接結算',
+				pass: before.state === 'open' && expired >= 1 && after.state === 'locked' && settled,
+				detail:
+					`到期前 ${before.state} → 到期後 ${after.state}（期望 locked）、` +
+					`結算${settled ? '成功' : '失敗 —— 後台會卡住'}`
+			});
+		}
+
+		// ── 14. 倒數到期後不能再下注 ────────────────────────
+		{
+			const mid = await makeMatch('expire-bet');
+			const market = await openMarket(mid, 0);
+			const u = await makeFundedUser('expire-bet-u', 1000);
+			await scheduleLock(market.id, -1);
+
+			let rejected = false;
+			try {
+				await placeBet({ userId: u, marketId: market.id, side: 'blue', amount: 100, idempotencyKey: crypto.randomUUID() });
+			} catch {
+				rejected = true;
+			}
+
+			const balance = await getBalance(u);
+			results.push({
+				name: '倒數到期後不能再下注',
+				pass: rejected && balance === 1000,
+				detail: rejected ? `已拒絕，餘額未變動（${balance}）` : '竟然下注成功 —— 有問題'
 			});
 		}
 	} finally {
