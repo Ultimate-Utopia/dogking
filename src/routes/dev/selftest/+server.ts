@@ -15,7 +15,7 @@ import { dev } from '$app/environment';
 import { eq, inArray } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { users, ledger, sessions, matches, markets, bets } from '$lib/server/db/schema';
+import { users, ledger, sessions, matches, markets, bets, purchaseOrders, redeemCodes } from '$lib/server/db/schema';
 import {
 	getBalance,
 	writeLedger,
@@ -35,6 +35,15 @@ import {
 	calcPayout,
 	deleteMarketsForMatches
 } from '$lib/server/tournament';
+import {
+	createRedeemCodes,
+	redeem,
+	generatePublicCode,
+	previewImport,
+	commitImport,
+	parseCsv,
+	extractCode
+} from '$lib/server/purchase';
 
 /** 假的 cookie 容器，讓我們能在不經過瀏覽器的情況下測試 session。 */
 function stubCookies() {
@@ -458,6 +467,89 @@ export const GET: RequestHandler = async () => {
 				detail: rejected ? `已拒絕，餘額未變動（${balance}）` : '竟然下注成功 —— 有問題'
 			});
 		}
+		// ── 15. 兌換碼只能用一次 ────────────────────────────
+		{
+			const a = await makeFundedUser('redeem-a', 0);
+			const b = await makeFundedUser('redeem-b', 0);
+			const [code] = await createRedeemCodes(1, 5000);
+
+			const got = await redeem(a, code);
+
+			let secondFailed = false;
+			try {
+				await redeem(b, code);
+			} catch {
+				secondFailed = true;
+			}
+
+			// 大小寫與空白應該被容忍
+			const [code2] = await createRedeemCodes(1, 250);
+			const gotLower = await redeem(b, ` ${code2.toLowerCase()} `);
+
+			results.push({
+				name: '兌換碼只能用一次，且容忍大小寫與空白',
+				pass: got === 5000 && secondFailed && (await getBalance(a)) === 5000 && gotLower === 250,
+				detail:
+					`首次兌換 ${got}、` +
+					`重複兌換${secondFailed ? '已擋下' : '竟然成功 —— 有問題'}、` +
+					`小寫加空白也能兌換 ${gotLower}`
+			});
+		}
+
+		// ── 16. 同一張訂單不會重複發幣 ──────────────────────
+		// 後台匯入同一份 CSV 兩次時，唯一索引必須擋下第二次。
+		{
+			const uid = await makeUser('order');
+			const code = await generatePublicCode();
+			await db.update(users).set({ publicCode: code }).where(eq(users.id, uid));
+
+			const csv = `訂單編號,金額,備註\nSELFTEST-1,300,${code}`;
+			const cols = { orderRef: 0, amount: 1, note: 2 };
+
+			const first = await commitImport(
+				'自我測試',
+				await previewImport('自我測試', parseCsv(csv), cols, true),
+				uid
+			);
+			const second = await commitImport(
+				'自我測試',
+				await previewImport('自我測試', parseCsv(csv), cols, true),
+				uid
+			);
+
+			const balance = await getBalance(uid);
+			await db.delete(purchaseOrders).where(eq(purchaseOrders.userId, uid));
+
+			results.push({
+				name: '同一張訂單不會重複發幣',
+				pass: first.credited === 1 && second.credited === 0 && balance === 30000,
+				detail:
+					`第一次發放 ${first.credited} 筆、第二次 ${second.credited} 筆（期望 0）、` +
+					`餘額 ${balance}（期望 30000，NT$300 × 100）`
+			});
+		}
+
+		// ── 17. 從雜亂的備註中抓出代碼 ──────────────────────
+		{
+			const cases: Array<[string, string | null]> = [
+				['K7M2QX', 'K7M2QX'],
+				['我的代碼 K7M2QX 謝謝', 'K7M2QX'],
+				['代碼:K7M2QX', 'K7M2QX'],
+				['k7m2qx', 'K7M2QX'],
+				['沒有填代碼', null],
+				['12345', null]
+			];
+			const bad = cases.filter(([input, want]) => extractCode(input) !== want);
+
+			results.push({
+				name: '從雜亂的備註中抓出代碼',
+				pass: bad.length === 0,
+				detail:
+					bad.length === 0
+						? `${cases.length} 種寫法全部正確辨識`
+						: `失敗：${bad.map(([i]) => i).join('、')}`
+			});
+		}
 	} finally {
 		// 清理順序必須順著外鍵反向走：
 		//   ledger 參照 bets 與 markets，所以帳本要最先刪，
@@ -465,6 +557,8 @@ export const GET: RequestHandler = async () => {
 		if (createdIds.length) {
 			await db.delete(sessions).where(inArray(sessions.userId, createdIds));
 			await db.delete(ledger).where(inArray(ledger.userId, createdIds));
+			await db.delete(purchaseOrders).where(inArray(purchaseOrders.userId, createdIds));
+			await db.delete(redeemCodes).where(inArray(redeemCodes.usedByUserId, createdIds));
 		}
 		if (createdMatchIds.length) await deleteMarketsForMatches(createdMatchIds);
 		if (createdIds.length) {

@@ -36,6 +36,16 @@ export const users = pgTable(
 		displayName: text('display_name').notNull(),
 		avatarUrl: text('avatar_url'),
 
+		/**
+		 * 公開短代碼，例如 K7M2QX。
+		 *
+		 * 買周邊時要填進訂單備註，後台才能把訂單對到帳號（規格書 §08）。
+		 * 內部 id 是 UUID，沒有人會把 36 個字元抄進賣貨便的備註欄。
+		 *
+		 * 字母表刻意排除 0/O/1/I/L —— 手寫或口述時最容易看錯的幾個。
+		 */
+		publicCode: text('public_code'),
+
 		/** 參賽主播。允許下注，但標記起來供事後查核（規格書 §10 內線風險）。 */
 		isParticipant: boolean('is_participant').notNull().default(false),
 		isAdmin: boolean('is_admin').notNull().default(false),
@@ -45,7 +55,10 @@ export const users = pgTable(
 
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 	},
-	(t) => [uniqueIndex('users_discord_id_idx').on(t.discordId)]
+	(t) => [
+		uniqueIndex('users_discord_id_idx').on(t.discordId),
+		uniqueIndex('users_public_code_idx').on(t.publicCode)
+	]
 );
 
 // ─────────────────────────────────────────────────────────
@@ -227,6 +240,39 @@ export const ledger = pgTable(
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 	},
 	(t) => [index('ledger_user_id_idx').on(t.userId), index('ledger_type_idx').on(t.type)]
+);
+
+// ─────────────────────────────────────────────────────────
+// purchase_orders —— 周邊訂單發幣紀錄（規格書 §08 主線路徑）
+//
+// order_ref 設唯一索引是這張表的重點：後台匯入同一份 CSV 兩次時，
+// 第二次會被資料庫擋下，不會有人拿到雙倍狗狗幣。
+// ─────────────────────────────────────────────────────────
+export const purchaseOrders = pgTable(
+	'purchase_orders',
+	{
+		id: serial('id').primaryKey(),
+		/** 賣貨便 / 綠界 / 其他 */
+		platform: text('platform').notNull(),
+		/** 平台上的訂單編號 */
+		orderRef: text('order_ref').notNull(),
+		amountTwd: integer('amount_twd').notNull(),
+		chips: bigint('chips', { mode: 'number' }).notNull(),
+
+		/** 比對到的帳號 */
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id),
+		/** 訂單備註上填的代碼原文，供事後查核 */
+		publicCode: text('public_code'),
+
+		adminUserId: uuid('admin_user_id').references(() => users.id),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [
+		uniqueIndex('purchase_orders_ref_idx').on(t.platform, t.orderRef),
+		index('purchase_orders_user_idx').on(t.userId)
+	]
 );
 
 // ─────────────────────────────────────────────────────────

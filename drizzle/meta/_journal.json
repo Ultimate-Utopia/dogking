@@ -22,6 +22,13 @@
       "when": 1786888661117,
       "tag": "0002_drop_legacy_match_user_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786898725909,
+      "tag": "0003_purchase_orders_and_public_code",
+      "breakpoints": true
     }
   ]
 }

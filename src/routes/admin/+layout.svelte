@@ -13,6 +13,7 @@
 	<header class="admin-bar">
 		<a class="admin-brand" href="/admin">終焉狗王大賽 <span>控制台</span></a>
 		<div class="admin-who">
+			<a href="/admin/coins">狗狗幣發放</a>
 			{data.admin.displayName}
 			<a href="/">回前台</a>
 		</div>

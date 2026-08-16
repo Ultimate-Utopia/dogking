@@ -12,6 +12,7 @@ import { env } from '$env/dynamic/private';
 import { db } from './db';
 import { sessions, users, ledger } from './db/schema';
 import type { DiscordProfile } from './discord';
+import { generatePublicCode } from './purchase';
 
 export const SESSION_COOKIE = 'dogking_session';
 const SESSION_DAYS = 30;
@@ -20,6 +21,8 @@ export interface SessionUser {
 	id: string;
 	displayName: string;
 	avatarUrl: string | null;
+	/** 買周邊時要填進訂單備註的短代碼（規格書 §08） */
+	publicCode: string | null;
 	isAdmin: boolean;
 	isParticipant: boolean;
 	status: string;
@@ -45,10 +48,15 @@ export async function upsertUserFromDiscord(profile: DiscordProfile): Promise<Se
 			.limit(1);
 
 		if (existing) {
-			// 暱稱和頭像可能改過，每次登入同步一次
+			// 暱稱和頭像可能改過，每次登入同步一次。
+			// 順便補上公開代碼，讓這個欄位新增之前就註冊的人也有。
 			const [updated] = await tx
 				.update(users)
-				.set({ displayName: profile.displayName, avatarUrl: profile.avatarUrl })
+				.set({
+					displayName: profile.displayName,
+					avatarUrl: profile.avatarUrl,
+					publicCode: existing.publicCode ?? (await generatePublicCode())
+				})
 				.where(eq(users.id, existing.id))
 				.returning();
 			return toSessionUser(updated);
@@ -59,7 +67,8 @@ export async function upsertUserFromDiscord(profile: DiscordProfile): Promise<Se
 			.values({
 				discordId: profile.discordId,
 				displayName: profile.displayName,
-				avatarUrl: profile.avatarUrl
+				avatarUrl: profile.avatarUrl,
+				publicCode: await generatePublicCode()
 			})
 			.returning();
 
@@ -83,6 +92,7 @@ function toSessionUser(u: typeof users.$inferSelect): SessionUser {
 		id: u.id,
 		displayName: u.displayName,
 		avatarUrl: u.avatarUrl,
+		publicCode: u.publicCode,
 		isAdmin: u.isAdmin,
 		isParticipant: u.isParticipant,
 		status: u.status

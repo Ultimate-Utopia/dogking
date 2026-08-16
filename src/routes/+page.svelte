@@ -197,6 +197,7 @@
 				<span class="who">{data.user.displayName}</span>
 				<span class="coins">{fmt(balance)}</span>
 				<span class="who">狗狗幣</span>
+				<a href="/coins">獲得狗狗幣</a>
 				{#if data.user.isAdmin}<a href="/admin">後台</a>{/if}
 				<form method="POST" action="/auth/logout" style="display:inline">
 					<button
