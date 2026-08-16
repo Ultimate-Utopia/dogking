@@ -12,6 +12,8 @@ import {
 	previewSettle,
 	setMatchParticipants,
 	updateMatchScore,
+	updateMatchMeta,
+	deleteMatch,
 	calcOdds
 } from '$lib/server/tournament';
 import { requireAdmin, logAdmin } from '$lib/server/admin';
@@ -70,6 +72,39 @@ export const actions: Actions = {
 			await logAdmin(admin.id, '設定對戰組合', `場次 ${params.id}`, { blue, red });
 			return { success: '對戰組合已更新' };
 		} catch (e) {
+			return toFail(e);
+		}
+	},
+
+	updateMeta: async ({ request, params, locals }) => {
+		const admin = requireAdmin(locals.user);
+		const form = await request.formData();
+		const roundLabel = String(form.get('roundLabel') ?? '');
+		const format = String(form.get('format') ?? 'BO1');
+		const isElimination = form.get('isElimination') === 'on';
+
+		try {
+			await updateMatchMeta(Number(params.id), roundLabel, format, isElimination);
+			await logAdmin(admin.id, '修改賽制資訊', `場次 ${params.id}`, {
+				roundLabel,
+				format,
+				isElimination
+			});
+			return { success: '賽制資訊已更新' };
+		} catch (e) {
+			return toFail(e);
+		}
+	},
+
+	deleteMatch: async ({ params, locals }) => {
+		const admin = requireAdmin(locals.user);
+
+		try {
+			await deleteMatch(Number(params.id));
+			await logAdmin(admin.id, '刪除場次', `場次 ${params.id}`);
+			redirect(303, '/admin');
+		} catch (e) {
+			if (e && typeof e === 'object' && 'status' in e && 'location' in e) throw e;
 			return toFail(e);
 		}
 	},

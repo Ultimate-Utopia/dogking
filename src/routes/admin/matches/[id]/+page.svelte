@@ -110,6 +110,39 @@
 	</div>
 {/if}
 
+<!-- ── 賽制資訊 ──────────────────────────────────────── -->
+<h2>賽制資訊</h2>
+<p class="hint">
+	企劃書的賽程表有無法自洽的地方（見規格書 §06），所以這些欄位都可以隨時修改。
+</p>
+<div class="panel">
+	<form method="POST" action="?/updateMeta" class="field-row">
+		<div class="field" style="flex:1;min-width:220px">
+			<label for="rl">輪次名稱</label>
+			<input id="rl" name="roundLabel" type="text" value={data.match.roundLabel} style="width:100%" />
+		</div>
+		<div class="field">
+			<label for="fm">賽制</label>
+			<select id="fm" name="format">
+				<option value="BO1" selected={data.match.format === 'BO1'}>BO1</option>
+				<option value="BO3" selected={data.match.format === 'BO3'}>BO3</option>
+				<option value="BO5" selected={data.match.format === 'BO5'}>BO5</option>
+			</select>
+		</div>
+		<div class="field">
+			<label for="el">輸者淘汰</label>
+			<label style="display:flex;align-items:center;gap:7px;height:39px;font-size:14px">
+				<input id="el" name="isElimination" type="checkbox" checked={data.match.isElimination} />
+				是
+			</label>
+		</div>
+		<button class="b b-quiet" style="flex:0" type="submit">儲存</button>
+	</form>
+	<p class="hint" style="margin:14px 0 0">
+		改賽制會影響小局盤的數量（BO1 一局、BO3 三局、BO5 五局）。已開的盤口不會被刪除。
+	</p>
+</div>
+
 <!-- ── 對戰組合 ──────────────────────────────────────── -->
 <h2>對戰組合</h2>
 <div class="panel">
@@ -247,4 +280,17 @@
 			</div>
 		</div>
 	{/each}
+</div>
+
+<!-- ── 刪除場次 ──────────────────────────────────────── -->
+<h2>刪除場次</h2>
+<div class="panel">
+	<p class="hint" style="margin:0 0 12px">
+		只有在還沒有人下注時才能刪除。已經有注單的場次請改用盤口的「取消並退款」。
+	</p>
+	<form method="POST" action="?/deleteMatch">
+		<button class="b b-quiet" style="flex:0;color:var(--red);border-color:var(--red)" type="submit">
+			刪除場次 {data.match.orderNo}
+		</button>
+	</form>
 </div>

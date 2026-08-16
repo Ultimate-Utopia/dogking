@@ -490,6 +490,70 @@ export async function setMatchParticipants(
 	return updated;
 }
 
+/**
+ * 更新場次的賽制資訊（輪次名稱、賽制、是否輸者淘汰）。
+ *
+ * 企劃書的賽程表有無法自洽的地方（見規格書 §06），
+ * 所以這些欄位必須讓後台隨時能改，不能寫死在 seed 裡。
+ */
+export async function updateMatchMeta(
+	matchId: number,
+	roundLabel: string,
+	format: string,
+	isElimination: boolean
+) {
+	if (!roundLabel.trim()) throw new MarketStateError('輪次名稱不能空白');
+	if (!['BO1', 'BO3', 'BO5'].includes(format)) throw new MarketStateError('賽制必須是 BO1／BO3／BO5');
+
+	const [updated] = await db
+		.update(matches)
+		.set({ roundLabel: roundLabel.trim(), format, isElimination })
+		.where(eq(matches.id, matchId))
+		.returning();
+
+	return updated;
+}
+
+/** 新增場次。用於賽程比預期長（例如需要補勝部決賽）的情況。 */
+export async function createMatch(orderNo: number, roundLabel: string, format: string) {
+	if (!roundLabel.trim()) throw new MarketStateError('輪次名稱不能空白');
+	if (!['BO1', 'BO3', 'BO5'].includes(format)) throw new MarketStateError('賽制必須是 BO1／BO3／BO5');
+
+	const [created] = await db
+		.insert(matches)
+		.values({ orderNo, roundLabel: roundLabel.trim(), format })
+		.returning();
+
+	return created;
+}
+
+/**
+ * 刪除場次。
+ *
+ * 只要盤口已經有人下注就拒絕 —— 那代表有真實的錢在裡面，
+ * 應該用「取消並退款」而不是直接刪掉。
+ */
+export async function deleteMatch(matchId: number) {
+	const own = await db.select().from(markets).where(eq(markets.matchId, matchId));
+
+	if (own.length) {
+		const ids = own.map((m) => m.id);
+		const [placed] = await db
+			.select({ id: bets.id })
+			.from(bets)
+			.where(inArray(bets.marketId, ids))
+			.limit(1);
+
+		if (placed) {
+			throw new MarketStateError('這個場次已經有人下注，不能刪除。請改用「取消並退款」。');
+		}
+
+		await db.delete(markets).where(eq(markets.matchId, matchId));
+	}
+
+	await db.delete(matches).where(eq(matches.id, matchId));
+}
+
 /** 更新比分與賽事狀態。 */
 export async function updateMatchScore(
 	matchId: number,

@@ -30,14 +30,24 @@ const PARTICIPANTS = [
 /**
  * 場次骨架。
  *
- * 賽制與「輸者淘汰」是企劃書明確記載的：
+ * 企劃書明確記載的部分：
  *   BO1 → 場次 1、2、3、4、7、8
  *   BO3 → 場次 5、6、9、10、11
  *   BO5 → 場次 12（總決賽）、13（加賽）
  *   輸者淘汰 → 場次 7～11
+ *   「複賽階段（勝部四強至決賽、敗部後續輪次）採 BO3」
  *
- * 場次 9～11 的輪次名稱從企劃書文字推不出來（需對照賽程圖），
- * 先標為待確認，後台可直接改。
+ * 輪次名稱由上述推得：既然 BO3 涵蓋「勝部四強**至決賽**」，
+ * 代表 5、6、9、10、11 之中必有一場是勝部決賽。依照打序，
+ * 勝部決賽排在敗部第一輪（7、8）之後最合理，故定為場次 9。
+ *
+ * ⚠️ 一處與企劃書不符：企劃書把場次 9 列為「輸者淘汰」，
+ * 但勝部決賽的敗者依定義是掉到敗部、不是淘汰，否則就不是雙敗淘汰了。
+ * 這裡採結構上正確的版本（isElimination = false）。
+ *
+ * ⚠️ 更根本的問題：9 人雙敗淘汰需要 16 場才能決出冠軍
+ * （要淘汰 8 人 × 每人 2 敗 = 16 敗，每場產生 1 敗），企劃書只列 12 場。
+ * 詳見規格書 §06。這些欄位全部可在後台修改，也可新增場次。
  */
 const MATCHES: Array<{
 	orderNo: number;
@@ -53,9 +63,10 @@ const MATCHES: Array<{
 	{ orderNo: 6, roundLabel: '勝部四強', format: 'BO3', isElimination: false },
 	{ orderNo: 7, roundLabel: '敗部第一輪', format: 'BO1', isElimination: true },
 	{ orderNo: 8, roundLabel: '敗部第一輪', format: 'BO1', isElimination: true },
-	{ orderNo: 9, roundLabel: '待確認（對照賽程圖）', format: 'BO3', isElimination: true },
-	{ orderNo: 10, roundLabel: '待確認（對照賽程圖）', format: 'BO3', isElimination: true },
-	{ orderNo: 11, roundLabel: '待確認（對照賽程圖）', format: 'BO3', isElimination: true },
+	// 勝部決賽：敗者掉到敗部而非淘汰，故 isElimination = false（與企劃書註記不同）
+	{ orderNo: 9, roundLabel: '勝部決賽', format: 'BO3', isElimination: false },
+	{ orderNo: 10, roundLabel: '敗部第二輪', format: 'BO3', isElimination: true },
+	{ orderNo: 11, roundLabel: '敗部決賽', format: 'BO3', isElimination: true },
 	{ orderNo: 12, roundLabel: '總決賽', format: 'BO5', isElimination: true },
 	{ orderNo: 13, roundLabel: '加賽（敗部冠軍勝出時觸發）', format: 'BO5', isElimination: true }
 ];
