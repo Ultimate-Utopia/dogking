@@ -31,19 +31,23 @@ const PARTICIPANTS: Array<{
 	role: 'player' | 'host';
 	roleLabel?: string;
 	doroSlug: string;
+	channelUrl: string;
 }> = [
-	{ name: '呦呦', role: 'player', doroSlug: 'youyou' },
-	{ name: '希蘿亞', role: 'player', doroSlug: 'shiroa' },
-	{ name: '黒羊める', role: 'player', doroSlug: 'meru' },
-	{ name: '雪寶うさぎ', role: 'player', doroSlug: 'yukibo' },
-	{ name: '伊索渡', role: 'player', doroSlug: 'isodo' },
-	{ name: '悠妮涅可', role: 'player', doroSlug: 'yunineko' },
-	{ name: '悠太翼', role: 'player', doroSlug: 'yuuta' },
-	{ name: '姆莉醬', role: 'player', doroSlug: 'muri' },
-	{ name: '愛紗公主', role: 'player', doroSlug: 'aisa' },
-	{ name: '語風薯薯', role: 'host', roleLabel: '賽事主持', doroSlug: 'shushu' },
-	{ name: '可樂月月', role: 'host', roleLabel: '賽事副持', doroSlug: 'yueyue' },
-	{ name: '艾絲梅亞', role: 'host', roleLabel: '賭盤副台', doroSlug: 'esmeya' }
+	// 頻道連結取自公會的 lit.link（lit.link/en/uutopia）。
+	// 該頁列出的 12 個名字與立繪資料夾完全一致，可作為名稱對應的交叉驗證。
+	{ name: '呦呦', role: 'player', doroSlug: 'youyou', channelUrl: 'https://www.youtube.com/@yunyun_twvt' },
+	{ name: '希蘿亞', role: 'player', doroSlug: 'shiroa', channelUrl: 'https://www.youtube.com/@Siroya.Neilson' },
+	{ name: '黒羊める', role: 'player', doroSlug: 'meru', channelUrl: 'https://www.youtube.com/channel/UCUhYqNYFmyP6MWGIZX9gndA' },
+	// 雪寶是 Twitch，不是 YouTube
+	{ name: '雪寶うさぎ', role: 'player', doroSlug: 'yukibo', channelUrl: 'https://www.twitch.tv/shinyuki2511' },
+	{ name: '伊索渡', role: 'player', doroSlug: 'isodo', channelUrl: 'https://www.youtube.com/@AesopDu' },
+	{ name: '悠妮涅可', role: 'player', doroSlug: 'yunineko', channelUrl: 'https://www.youtube.com/@uninekoch_3337' },
+	{ name: '悠太翼', role: 'player', doroSlug: 'yuuta', channelUrl: 'https://www.youtube.com/@YuutaTsubasa' },
+	{ name: '姆莉醬', role: 'player', doroSlug: 'muri', channelUrl: 'https://www.youtube.com/@MurichanChannel' },
+	{ name: '愛紗公主', role: 'player', doroSlug: 'aisa', channelUrl: 'https://www.youtube.com/@愛紗公主與毬毬Aisa' },
+	{ name: '語風薯薯', role: 'host', roleLabel: '賽事主持', doroSlug: 'shushu', channelUrl: 'https://www.youtube.com/channel/UCLHSj-ZnzmpQlZuUcnXMoVg' },
+	{ name: '可樂月月', role: 'host', roleLabel: '賽事副持', doroSlug: 'yueyue', channelUrl: 'https://www.youtube.com/@colamoonie' },
+	{ name: '艾絲梅亞', role: 'host', roleLabel: '賭盤副台', doroSlug: 'esmeya', channelUrl: 'https://www.youtube.com/@Esmea666' }
 ];
 
 /**
@@ -106,7 +110,12 @@ export const GET: RequestHandler = async () => {
 		if (found) {
 			await db
 				.update(participants)
-				.set({ doroSlug: p.doroSlug, role: p.role, roleLabel: p.roleLabel ?? null })
+				.set({
+					doroSlug: p.doroSlug,
+					role: p.role,
+					roleLabel: p.roleLabel ?? null,
+					channelUrl: p.channelUrl
+				})
 				.where(eq(participants.id, found.id));
 		} else {
 			await db.insert(participants).values({ ...p, orderNo: i + 1 });
