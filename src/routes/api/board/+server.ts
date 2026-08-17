@@ -15,8 +15,10 @@ import { getBoardState } from '$lib/server/board';
 export const GET: RequestHandler = async ({ setHeaders }) => {
 	const state = await getBoardState();
 
+	// stale-while-revalidate 拉長的理由見 src/routes/+page.server.ts：
+	// 太短的話，快取一過期就會有使用者被擋著等回源。
 	setHeaders({
-		'Cache-Control': 'public, max-age=3, stale-while-revalidate=10'
+		'Cache-Control': 'public, max-age=3, stale-while-revalidate=600'
 	});
 
 	return json(state);

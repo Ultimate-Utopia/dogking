@@ -24,7 +24,18 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
 		getRoster()
 	]);
 
-	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=10' });
+	/**
+	 * stale-while-revalidate 刻意設得很長。
+	 *
+	 * 超過 max-age + stale-while-revalidate 之後，CDN 就必須**擋著使用者**
+	 * 回源取新資料。若那一刻函式正好慢（冷啟動、資料庫連線卡住），
+	 * 使用者看到的是一片空白直到逾時 —— 實際發生過，量到 30 秒。
+	 *
+	 * 拉長之後，過期的內容會先送出去、背景再更新，觀眾永遠不用等函式。
+	 * 活動進行中流量不斷，實際上每 3 秒就會被更新一次，不會真的看到舊資料；
+	 * 只有在沒人訪問的冷門時段才可能拿到稍舊的內容，而那時本來也沒事發生。
+	 */
+	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=600' });
 
 	return { board, leaderboard, roster };
 };

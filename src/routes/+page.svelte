@@ -266,7 +266,14 @@
 <div class="topbar">
 	<div class="topbar-in">
 		<a class="brand" href="/">終焉狗王大賽</a>
-		{#if user}
+		<!--
+			登入狀態要等 /api/me 回來才知道（首頁 HTML 被快取後對所有人都一樣）。
+			在那之前顯示骨架而不是「請登入」—— 否則已登入的人會先看到登入按鈕、
+			再跳成自己的餘額，看起來像卡住。
+		-->
+		{#if !meLoaded}
+			<div class="purse"><span class="skeleton"></span></div>
+		{:else if user}
 			<div class="purse">
 				<span class="who">{user.displayName}</span>
 				<span class="coins">{fmt(balance)}</span>

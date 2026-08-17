@@ -32,7 +32,15 @@ const client = postgres(env.DATABASE_URL, {
 	max: dev ? 5 : 3,
 	prepare: false,
 	idle_timeout: 20,
-	connect_timeout: 10
+
+	/**
+	 * 連線卡住時要快速放棄。
+	 *
+	 * 原本設 10 秒，而 postgres.js 會重試 —— 實際遇過整個請求拖到 30 秒，
+	 * 使用者盯著空白畫面等到逾時。設短一點的話，失敗會很快浮現，
+	 * CDN 也能改送稍舊的快取內容（見各端點的 stale-while-revalidate）。
+	 */
+	connect_timeout: 5
 });
 
 export const db = drizzle(client, { schema });
