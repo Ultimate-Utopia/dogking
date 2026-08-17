@@ -138,6 +138,39 @@ node scripts/seed.mjs --url "<正式站連線字串>" --admin "<你的 Discord �
 Discord 使用者 ID 的取得方式：Discord 設定 → 進階 → 開啟開發者模式，
 然後在自己的名字上按右鍵 → 複製使用者 ID。
 
+### 清除下注資料（彩排完用）
+
+練習賽彩排完，要把正式站清乾淨再開始真正的活動：
+
+```bash
+node scripts/reset.mjs
+```
+
+**預設是預覽，不會動任何資料。** 確認清單無誤後才加 `--apply`：
+
+```bash
+node scripts/reset.mjs --apply
+```
+
+| 會清除 | 會保留 |
+| --- | --- |
+| 所有盤口與注單 | 使用者帳號與登入狀態 |
+| 帳本的 `bet` / `payout` / `refund` | 帳本的 `signup` / `purchase` / `adjust` |
+| 場次的比分與對戰組合 | participants、purchase_orders、redeem_codes、admin_logs |
+
+> ⚠️ **`purchase` 是買周邊換來的，背後有真實金錢，腳本不會刪。**
+> 清除後每個人的餘額會回到「註冊贈送 + 周邊訂單 + 人工調整」的總和。
+
+執行前會自動把要刪的資料備份到 `backups/reset-<時間>.json`，誤刪還救得回來。
+
+其他選項：
+
+| 參數 | 用途 |
+| --- | --- |
+| `--keep-matches` | 保留對戰組合與比分，只清盤口與注單 |
+| `--url "postgres://..."` | 指定資料庫，不用改 `.env` |
+| `--no-backup` | 跳過備份（不建議） |
+
 ### 上線後檢查
 
 | 檢查項目 | 預期 |
