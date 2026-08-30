@@ -13,6 +13,7 @@ import {
 	setMatchParticipants,
 	updateMatchScore,
 	updateMatchMeta,
+	advanceFromMatch,
 	deleteMatch,
 	expireLocks,
 	calcOdds
@@ -132,6 +133,13 @@ export const actions: Actions = {
 				state,
 				winnerSide
 			});
+
+			// 判定了勝方就把兩邊送進下一場，操作員不必再手動填對戰組合
+			const moved = winnerSide ? await advanceFromMatch(Number(params.id)) : [];
+			if (moved.length) {
+				await logAdmin(admin.id, '自動晉級', `場次 ${params.id}`, { moved });
+				return { success: `比分已更新。自動晉級：${moved.join('、')}` };
+			}
 			return { success: '比分已更新' };
 		} catch (e) {
 			return toFail(e);

@@ -41,6 +41,7 @@ if (!url) {
 }
 
 const adminDiscordId = argOf('--admin');
+const REPLACE_MATCHES = args.includes('--replace-matches');
 
 // 只顯示主機名，不要把密碼印到終端機或 CI 記錄裡
 const host = (() => {
@@ -83,11 +84,37 @@ try {
 	// ── 場次骨架 ───────────────────────────────────────
 	// 只在完全沒有場次時建立。已經開始跑的賽程不該被腳本覆蓋。
 	const [{ count }] = await sql`SELECT COUNT(*)::int AS count FROM matches`;
-	if (count === 0) {
+
+	// --replace-matches：賽程本身改了（例如賽程圖與原先假設不符）時用。
+	// 有任何注單就拒絕 —— 那代表已經有人押在這些場次上，
+	// 砍掉重建會讓注單指向不存在的場次。請先跑 scripts/reset.mjs。
+	if (REPLACE_MATCHES && count > 0) {
+		const [{ bets }] = await sql`SELECT COUNT(*)::int AS bets FROM bets`;
+		if (bets > 0) {
+			console.error(`  ❌ 目前有 ${bets} 筆注單，不能重建賽程。`);
+			console.error('     請先執行 node scripts/reset.mjs --apply 清除下注資料。');
+			process.exit(1);
+		}
+		await sql`DELETE FROM markets`;
+		await sql`DELETE FROM matches`;
+		console.log(`場次：已清除舊的 ${count} 場，準備重建`);
+	}
+
+	const shouldCreate = count === 0 || REPLACE_MATCHES;
+	if (shouldCreate) {
 		for (const m of MATCHES) {
 			await sql`
-				INSERT INTO matches (order_no, round_label, format, is_elimination)
-				VALUES (${m.orderNo}, ${m.roundLabel}, ${m.format}, ${m.isElimination})`;
+				INSERT INTO matches (
+					order_no, round_label, format, is_elimination,
+					bracket, round_no,
+					winner_to_match_no, winner_to_slot,
+					loser_to_match_no, loser_to_slot
+				) VALUES (
+					${m.orderNo}, ${m.roundLabel}, ${m.format}, ${m.isElimination},
+					${m.bracket}, ${m.roundNo},
+					${m.winnerTo?.match ?? null}, ${m.winnerTo?.slot ?? null},
+					${m.loserTo?.match ?? null}, ${m.loserTo?.slot ?? null}
+				)`;
 		}
 		console.log(`場次：建立 ${MATCHES.length} 場`);
 	} else {

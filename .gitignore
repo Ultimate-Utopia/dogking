@@ -9,6 +9,9 @@ node_modules
 
 /postgres-data
 
+# reset 腳本的資料備份——裡面是真實帳本與餘額，不得進版控
+/backups
+
 .DS_Store
 Thumbs.db
 *.log

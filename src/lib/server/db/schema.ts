@@ -129,8 +129,28 @@ export const matches = pgTable('matches', {
 	roundLabel: text('round_label').notNull(),
 	/** BO1 | BO3 | BO5 */
 	format: text('format').notNull(),
-	/** 輸者淘汰（規格書：場次 7～11、12、13） */
+	/** 輸者淘汰。勝部的敗者會掉到敗部，不算淘汰。 */
 	isElimination: boolean('is_elimination').notNull().default(false),
+
+	/**
+	 * 賽程樹的位置：winners（勝部）/ losers（敗部）/ final（總決賽與加賽）。
+	 * 與 roundNo 一起決定樹狀圖上的欄位。
+	 */
+	bracket: text('bracket').notNull().default('winners'),
+	/** 同一個 bracket 內的第幾輪，從 1 起算 */
+	roundNo: integer('round_no').notNull().default(1),
+
+	/**
+	 * 晉級關係：勝者與敗者各自流向哪一場的哪一側。
+	 *
+	 * 刻意記 order_no 而非 id —— seed 重跑後 id 會變，場次編號不會，
+	 * 而且直接對得上賽程圖上「場次 5」這種寫法，人工核對容易得多。
+	 * null 代表到此為止（拿冠軍或遭淘汰）。
+	 */
+	winnerToMatchNo: integer('winner_to_match_no'),
+	winnerToSlot: text('winner_to_slot'),
+	loserToMatchNo: integer('loser_to_match_no'),
+	loserToSlot: text('loser_to_slot'),
 
 	/** 對戰雙方。雙敗淘汰下，晚期場次要等前面打完才確定，因此可為 null。 */
 	blueParticipantId: integer('blue_participant_id').references(() => participants.id),

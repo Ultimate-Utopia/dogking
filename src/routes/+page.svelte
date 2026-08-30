@@ -3,6 +3,8 @@
 	import { enhance } from '$app/forms';
 	import '../app.css';
 	import './board.css';
+	import './bracket.css';
+	import Bracket from '$lib/components/Bracket.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -18,9 +20,11 @@
 	 */
 	let polledBoard = $state<typeof data.board | null>(null);
 	let polledLeaderboard = $state<typeof data.leaderboard | null>(null);
+	let polledBracket = $state<typeof data.bracket | null>(null);
 
 	const board = $derived(polledBoard ?? data.board);
 	const leaderboard = $derived(polledLeaderboard ?? data.leaderboard);
+	const bracket = $derived(polledBracket ?? data.bracket);
 
 	/**
 	 * 個人資料一律由前端取得。
@@ -219,6 +223,18 @@
 		}
 	}
 
+	/**
+	 * 賽程樹。只有某一場判定勝負時才會變，所以輪詢得比看板慢得多
+	 * （/api/bracket 也對應設了 15 秒快取）。
+	 */
+	async function refreshBracket() {
+		try {
+			polledBracket = await fetch('/api/bracket').then((r) => r.json());
+		} catch {
+			// 沿用上一次的結果，下一輪會補上
+		}
+	}
+
 	onMount(() => {
 		newKey();
 		clockSkew = new Date(board.now).getTime() - Date.now();
@@ -229,11 +245,13 @@
 
 		// 只有看板在輪詢（回應由 CDN 快取，見 /api/board 的註解）
 		const poll = setInterval(refreshBoard, 3000);
+		const bracketPoll = setInterval(refreshBracket, 15000);
 		// 倒數每秒重畫，但不打伺服器
 		const clock = setInterval(() => (tick = Date.now()), 1000);
 
 		return () => {
 			clearInterval(poll);
+			clearInterval(bracketPoll);
 			clearInterval(clock);
 		};
 	});
@@ -521,6 +539,12 @@
 				<p style="margin:0;color:var(--muted)">已經是最後一場了。</p>
 			{/if}
 		</div>
+	</div>
+
+	<!-- ── 賽程樹狀圖 ──────────────────────────────── -->
+	<div class="card2" style="margin-bottom:16px">
+		<h2>賽程樹</h2>
+		<Bracket {bracket} />
 	</div>
 
 	<!-- ── 排行榜與個人紀錄 ──────────────────────────── -->

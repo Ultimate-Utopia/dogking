@@ -13,6 +13,22 @@ import { db } from '$lib/server/db';
 import { participants, matches } from '$lib/server/db/schema';
 import { ROSTER, MATCHES } from '$lib/data/roster.js';
 
+/** 把 roster.js 的巢狀晉級關係攤平成資料表欄位 */
+function toMatchRow(m: (typeof MATCHES)[number]) {
+	return {
+		orderNo: m.orderNo,
+		roundLabel: m.roundLabel,
+		format: m.format,
+		isElimination: m.isElimination,
+		bracket: m.bracket,
+		roundNo: m.roundNo,
+		winnerToMatchNo: m.winnerTo?.match ?? null,
+		winnerToSlot: m.winnerTo?.slot ?? null,
+		loserToMatchNo: m.loserTo?.match ?? null,
+		loserToSlot: m.loserTo?.slot ?? null
+	};
+}
+
 export const GET: RequestHandler = async () => {
 	requireLocalDev();
 
@@ -44,7 +60,7 @@ export const GET: RequestHandler = async () => {
 
 	// 場次只在完全沒有時建立，不覆蓋進行中的賽程
 	if (existingM.length === 0) {
-		await db.insert(matches).values(MATCHES);
+		await db.insert(matches).values(MATCHES.map(toMatchRow));
 		addedMatches = MATCHES.length;
 	}
 

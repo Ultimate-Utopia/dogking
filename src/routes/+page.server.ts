@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { getBoardState, getLeaderboard, getRoster } from '$lib/server/board';
+import { getBoardState, getLeaderboard, getRoster, getBracket } from '$lib/server/board';
 import { placeBet } from '$lib/server/tournament';
 import { InsufficientBalanceError } from '$lib/server/ledger';
 
@@ -18,10 +18,11 @@ import { InsufficientBalanceError } from '$lib/server/ledger';
  * 代價是登入狀態會在 JS 載入後才出現，換來的是整站扛得住活動當天的流量。
  */
 export const load: PageServerLoad = async ({ setHeaders }) => {
-	const [board, leaderboard, roster] = await Promise.all([
+	const [board, leaderboard, roster, bracket] = await Promise.all([
 		getBoardState(),
 		getLeaderboard(5),
-		getRoster()
+		getRoster(),
+		getBracket()
 	]);
 
 	/**
@@ -37,7 +38,7 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
 	 */
 	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=600' });
 
-	return { board, leaderboard, roster };
+	return { board, leaderboard, roster, bracket };
 };
 
 export const actions: Actions = {

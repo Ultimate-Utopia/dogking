@@ -575,6 +575,56 @@ export async function deleteMatch(matchId: number) {
 	await db.delete(matches).where(eq(matches.id, matchId));
 }
 
+/**
+ * 依晉級關係，把某場的勝者與敗者送進下一場。
+ *
+ * 賽程圖上「勝者A → 場次5」這種線，就是靠這裡自動完成的。
+ * 操作員只要判定勝方，後面幾場的對戰組合會自己長出來 ——
+ * 當天少一半的手動輸入，也少一個填錯的機會。
+ *
+ * 刻意「只填空位、不覆蓋」：如果下一場已經有人（例如操作員手動改過，
+ * 或同一場被重複判定），就不動它，避免把人工修正洗掉。
+ * 要改的話請直接在該場次的「對戰組合」改。
+ */
+export async function advanceFromMatch(matchId: number) {
+	const [m] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+	if (!m || !m.winnerSide) return [];
+
+	const winnerId = m.winnerSide === 'blue' ? m.blueParticipantId : m.redParticipantId;
+	const loserId = m.winnerSide === 'blue' ? m.redParticipantId : m.blueParticipantId;
+
+	const moves: Array<{ toMatchNo: number; slot: string; participantId: number; kind: '勝者' | '敗者' }> = [];
+	if (m.winnerToMatchNo && m.winnerToSlot && winnerId) {
+		moves.push({ toMatchNo: m.winnerToMatchNo, slot: m.winnerToSlot, participantId: winnerId, kind: '勝者' });
+	}
+	if (m.loserToMatchNo && m.loserToSlot && loserId) {
+		moves.push({ toMatchNo: m.loserToMatchNo, slot: m.loserToSlot, participantId: loserId, kind: '敗者' });
+	}
+
+	const done: string[] = [];
+	for (const mv of moves) {
+		const [target] = await db
+			.select()
+			.from(matches)
+			.where(eq(matches.orderNo, mv.toMatchNo))
+			.limit(1);
+		if (!target) continue;
+
+		const occupied = mv.slot === 'blue' ? target.blueParticipantId : target.redParticipantId;
+		if (occupied) continue; // 已經有人，不覆蓋
+
+		await db
+			.update(matches)
+			.set(mv.slot === 'blue' ? { blueParticipantId: mv.participantId } : { redParticipantId: mv.participantId })
+			.where(eq(matches.id, target.id));
+
+		const [p] = await db.select().from(participants).where(eq(participants.id, mv.participantId)).limit(1);
+		done.push(`${mv.kind} ${p?.name ?? ''} → 場次 ${mv.toMatchNo}`);
+	}
+
+	return done;
+}
+
 /** 更新比分與賽事狀態。 */
 export async function updateMatchScore(
 	matchId: number,

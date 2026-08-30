@@ -38,37 +38,65 @@ export const ROSTER = [
 ];
 
 /**
+ * @typedef {object} Advance
+ * @property {number} match  流向第幾場（場次編號）
+ * @property {'blue'|'red'} slot  流向該場的哪一側
+ */
+
+/**
  * @typedef {object} MatchSeed
  * @property {number} orderNo
  * @property {string} roundLabel
  * @property {'BO1'|'BO3'|'BO5'} format
  * @property {boolean} isElimination
+ * @property {'winners'|'losers'|'final'} bracket
+ * @property {number} roundNo
+ * @property {Advance|null} winnerTo
+ * @property {Advance|null} loserTo
  */
 
 /**
- * 場次骨架。對戰組合刻意留空 —— 雙敗淘汰下，
- * 場次 5 的對手要等場次 1、2 打完才確定，由後台在賽程推進時填入。
+ * 賽程 —— 依主辦方提供的賽程圖建立。
  *
- * ⚠️ 9 人雙敗淘汰需要 16 場才能決出冠軍（淘汰 8 人 × 每人 2 敗），
- * 企劃書只列 12 場。詳見規格書 §06。這些欄位全部可在後台修改。
+ * 這是標準的 8 人雙敗淘汰：2 × 8 − 2 = 14 場，正好對上圖上的場次 1～14。
  *
- * 場次 9 的 isElimination 與企劃書不同：企劃書列為輸者淘汰，
- * 但勝部決賽的敗者依定義掉到敗部而非淘汰。
+ * ⚠️ 企劃書文字寫「9 名參賽者、12 場」，兩個數字都與賽程圖不符。
+ *    目前依賽程圖建立；第 9 位參賽者的安排待主辦方確認。
+ *
+ * 晉級關係（winnerTo / loserTo）是樹狀圖與「判定勝方後自動帶入下一場」
+ * 的依據。null 代表到此為止 —— 拿冠軍，或遭淘汰。
  *
  * @type {MatchSeed[]}
  */
 export const MATCHES = [
-	{ orderNo: 1, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false },
-	{ orderNo: 2, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false },
-	{ orderNo: 3, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false },
-	{ orderNo: 4, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false },
-	{ orderNo: 5, roundLabel: '勝部四強', format: 'BO3', isElimination: false },
-	{ orderNo: 6, roundLabel: '勝部四強', format: 'BO3', isElimination: false },
-	{ orderNo: 7, roundLabel: '敗部第一輪', format: 'BO1', isElimination: true },
-	{ orderNo: 8, roundLabel: '敗部第一輪', format: 'BO1', isElimination: true },
-	{ orderNo: 9, roundLabel: '勝部決賽', format: 'BO3', isElimination: false },
-	{ orderNo: 10, roundLabel: '敗部第二輪', format: 'BO3', isElimination: true },
-	{ orderNo: 11, roundLabel: '敗部決賽', format: 'BO3', isElimination: true },
-	{ orderNo: 12, roundLabel: '總決賽', format: 'BO5', isElimination: true },
-	{ orderNo: 13, roundLabel: '加賽（敗部冠軍勝出時觸發）', format: 'BO5', isElimination: true }
+	// ── 勝部第一輪（BO1）敗者掉到敗部，不算淘汰 ──
+	{ orderNo: 1, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false, bracket: 'winners', roundNo: 1, winnerTo: { match: 5, slot: 'blue' }, loserTo: { match: 7, slot: 'blue' } },
+	{ orderNo: 2, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false, bracket: 'winners', roundNo: 1, winnerTo: { match: 5, slot: 'red' }, loserTo: { match: 7, slot: 'red' } },
+	{ orderNo: 3, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false, bracket: 'winners', roundNo: 1, winnerTo: { match: 6, slot: 'blue' }, loserTo: { match: 8, slot: 'blue' } },
+	{ orderNo: 4, roundLabel: '勝部第一輪', format: 'BO1', isElimination: false, bracket: 'winners', roundNo: 1, winnerTo: { match: 6, slot: 'red' }, loserTo: { match: 8, slot: 'red' } },
+
+	// ── 勝部四強（BO3）──
+	{ orderNo: 5, roundLabel: '勝部四強', format: 'BO3', isElimination: false, bracket: 'winners', roundNo: 2, winnerTo: { match: 11, slot: 'blue' }, loserTo: { match: 9, slot: 'red' } },
+	{ orderNo: 6, roundLabel: '勝部四強', format: 'BO3', isElimination: false, bracket: 'winners', roundNo: 2, winnerTo: { match: 11, slot: 'red' }, loserTo: { match: 10, slot: 'red' } },
+
+	// ── 敗部第一輪（BO1）從這裡開始輸了就淘汰 ──
+	{ orderNo: 7, roundLabel: '敗部第一輪', format: 'BO1', isElimination: true, bracket: 'losers', roundNo: 1, winnerTo: { match: 9, slot: 'blue' }, loserTo: null },
+	{ orderNo: 8, roundLabel: '敗部第一輪', format: 'BO1', isElimination: true, bracket: 'losers', roundNo: 1, winnerTo: { match: 10, slot: 'blue' }, loserTo: null },
+
+	// ── 敗部第二輪（BO3）敗部勝者對上勝部掉下來的人 ──
+	{ orderNo: 9, roundLabel: '敗部第二輪', format: 'BO3', isElimination: true, bracket: 'losers', roundNo: 2, winnerTo: { match: 12, slot: 'blue' }, loserTo: null },
+	{ orderNo: 10, roundLabel: '敗部第二輪', format: 'BO3', isElimination: true, bracket: 'losers', roundNo: 2, winnerTo: { match: 12, slot: 'red' }, loserTo: null },
+
+	// ── 勝部決賽（BO3）敗者掉到敗部決賽 ──
+	{ orderNo: 11, roundLabel: '勝部決賽', format: 'BO3', isElimination: false, bracket: 'winners', roundNo: 3, winnerTo: { match: 14, slot: 'blue' }, loserTo: { match: 13, slot: 'blue' } },
+
+	// ── 敗部第三輪與敗部決賽（BO3）──
+	{ orderNo: 12, roundLabel: '敗部第三輪', format: 'BO3', isElimination: true, bracket: 'losers', roundNo: 3, winnerTo: { match: 13, slot: 'red' }, loserTo: null },
+	{ orderNo: 13, roundLabel: '敗部決賽', format: 'BO3', isElimination: true, bracket: 'losers', roundNo: 4, winnerTo: { match: 14, slot: 'red' }, loserTo: null },
+
+	// ── 總決賽（BO5）──
+	{ orderNo: 14, roundLabel: '總決賽', format: 'BO5', isElimination: true, bracket: 'final', roundNo: 1, winnerTo: null, loserTo: null },
+
+	// ── 加賽（BO5）只有敗部冠軍在場次 14 擊敗勝部冠軍時才進行 ──
+	{ orderNo: 15, roundLabel: '加賽（敗部冠軍勝出時觸發）', format: 'BO5', isElimination: true, bracket: 'final', roundNo: 2, winnerTo: null, loserTo: null }
 ];

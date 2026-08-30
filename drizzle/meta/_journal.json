@@ -43,6 +43,13 @@
       "when": 1786901277281,
       "tag": "0005_drop_legacy_participant_images",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788119738623,
+      "tag": "0006_bracket_advancement",
+      "breakpoints": true
     }
   ]
 }

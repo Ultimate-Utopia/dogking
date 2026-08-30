@@ -171,6 +171,83 @@ export async function getLeaderboard(limit = 5) {
 	return rows.map((r, i) => ({ rank: i + 1, ...r, balance: Number(r.balance) }));
 }
 
+export interface BracketNode {
+	orderNo: number;
+	roundLabel: string;
+	format: string;
+	state: string;
+	bracket: string;
+	roundNo: number;
+	blueName: string | null;
+	redName: string | null;
+	blueDoro: string | null;
+	redDoro: string | null;
+	scoreBlue: number;
+	scoreRed: number;
+	winnerSide: string | null;
+	/** 這一場有沒有正在開放的盤口，前台用來標「可下注」 */
+	hasOpenMarket: boolean;
+}
+
+/**
+ * 賽程樹。回傳依 bracket 與輪次分組的場次，供前台畫樹狀圖。
+ *
+ * 加賽（final R2）只有在真的觸發時才回傳 —— 沒發生的話畫出來會讓觀眾誤會
+ * 一定會打到那一場。判斷方式是總決賽已經有對戰組合且加賽也被指派了人。
+ */
+export async function getBracket() {
+	const [allMatches, allPeople, allMarkets] = await Promise.all([
+		db.select().from(matches).orderBy(asc(matches.orderNo)),
+		db.select().from(participants),
+		db.select().from(markets)
+	]);
+
+	const nameOf = (id: number | null) =>
+		id === null ? null : (allPeople.find((p) => p.id === id) ?? null);
+
+	const nodes: BracketNode[] = allMatches
+		.filter((m) => {
+			// 加賽未觸發就不顯示
+			if (m.bracket === 'final' && m.roundNo === 2) {
+				return m.blueParticipantId !== null || m.redParticipantId !== null;
+			}
+			return true;
+		})
+		.map((m) => {
+			const blue = nameOf(m.blueParticipantId);
+			const red = nameOf(m.redParticipantId);
+			return {
+				orderNo: m.orderNo,
+				roundLabel: m.roundLabel,
+				format: m.format,
+				state: m.state,
+				bracket: m.bracket,
+				roundNo: m.roundNo,
+				blueName: blue?.name ?? null,
+				redName: red?.name ?? null,
+				blueDoro: blue?.doroSlug ?? null,
+				redDoro: red?.doroSlug ?? null,
+				scoreBlue: m.scoreBlue,
+				scoreRed: m.scoreRed,
+				winnerSide: m.winnerSide,
+				hasOpenMarket: allMarkets.some((mk) => mk.matchId === m.id && mk.state === 'open')
+			};
+		});
+
+	/** 依 bracket 分組，每組再依輪次切成一欄一欄 */
+	const group = (name: string) => {
+		const inBracket = nodes.filter((n) => n.bracket === name);
+		const rounds = [...new Set(inBracket.map((n) => n.roundNo))].sort((a, b) => a - b);
+		return rounds.map((r) => ({
+			roundNo: r,
+			label: inBracket.find((n) => n.roundNo === r)?.roundLabel ?? '',
+			matches: inBracket.filter((n) => n.roundNo === r)
+		}));
+	};
+
+	return { winners: group('winners'), losers: group('losers'), final: group('final') };
+}
+
 /** 賽況資訊區用：參賽者與主持群，含立繪與頻道連結。 */
 export async function getRoster() {
 	const rows = await db.select().from(participants).orderBy(asc(participants.orderNo));
