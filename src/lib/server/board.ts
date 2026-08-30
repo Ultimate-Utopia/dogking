@@ -187,65 +187,146 @@ export interface BracketNode {
 	winnerSide: string | null;
 	/** 這一場有沒有正在開放的盤口，前台用來標「可下注」 */
 	hasOpenMarket: boolean;
+	/** 畫在第幾欄。由晉級關係推得，見 assignColumns。 */
+	col: number;
+	winnerTo: { matchNo: number; slot: string } | null;
+	loserTo: { matchNo: number; slot: string } | null;
+}
+
+export interface BracketView {
+	nodes: BracketNode[];
+	/** 場次欄位數（不含冠軍那一欄） */
+	cols: number;
+	championCol: number;
+	champion: { name: string; doro: string | null } | null;
+	/** 敗部冠軍贏下總決賽，還差一場加賽才能定冠軍。 */
+	pendingReset: boolean;
 }
 
 /**
- * 賽程樹。回傳依 bracket 與輪次分組的場次，供前台畫樹狀圖。
+ * 每一場該站在第幾欄 —— 取「從第一輪走到這一場的最長路徑」。
+ *
+ * 不能直接拿輪次當欄位：雙敗淘汰裡勝部與敗部的輪次不同步，
+ * 敗部第二輪要等勝部四強打完才能打，拿輪次畫會讓箭頭往回指。
+ * 取最長路徑則保證每條連線都是從左往右。
+ *
+ * 依場次編號遞增處理即可 —— 晉級一定指向更大的編號，
+ * 這點由 scripts/verify-bracket.mjs 守著。
+ */
+function assignColumns(rows: (typeof matches.$inferSelect)[]): Map<number, number> {
+	const preds = new Map<number, number[]>();
+	const push = (to: number | null, from: number) => {
+		if (to === null) return;
+		const list = preds.get(to);
+		if (list) list.push(from);
+		else preds.set(to, [from]);
+	};
+
+	for (const m of rows) {
+		push(m.winnerToMatchNo, m.orderNo);
+		push(m.loserToMatchNo, m.orderNo);
+	}
+
+	const col = new Map<number, number>();
+	for (const m of [...rows].sort((a, b) => a.orderNo - b.orderNo)) {
+		const from = preds.get(m.orderNo) ?? [];
+		col.set(m.orderNo, from.length ? Math.max(...from.map((p) => (col.get(p) ?? 0) + 1)) : 0);
+	}
+	return col;
+}
+
+/**
+ * 賽程樹。回傳所有場次、它們的欄位與晉級去向，前台依這份資料畫線。
  *
  * 加賽（final R2）只有在真的觸發時才回傳 —— 沒發生的話畫出來會讓觀眾誤會
- * 一定會打到那一場。判斷方式是總決賽已經有對戰組合且加賽也被指派了人。
+ * 一定會打到那一場。判斷方式是雙方至少有一邊已被指派。
  */
-export async function getBracket() {
+export async function getBracket(): Promise<BracketView> {
 	const [allMatches, allPeople, allMarkets] = await Promise.all([
 		db.select().from(matches).orderBy(asc(matches.orderNo)),
 		db.select().from(participants),
 		db.select().from(markets)
 	]);
 
+	const shown = allMatches.filter((m) => {
+		if (m.bracket === 'final' && m.roundNo === 2) {
+			return m.blueParticipantId !== null || m.redParticipantId !== null;
+		}
+		return true;
+	});
+
+	const col = assignColumns(shown);
 	const nameOf = (id: number | null) =>
 		id === null ? null : (allPeople.find((p) => p.id === id) ?? null);
 
-	const nodes: BracketNode[] = allMatches
-		.filter((m) => {
-			// 加賽未觸發就不顯示
-			if (m.bracket === 'final' && m.roundNo === 2) {
-				return m.blueParticipantId !== null || m.redParticipantId !== null;
-			}
-			return true;
-		})
-		.map((m) => {
-			const blue = nameOf(m.blueParticipantId);
-			const red = nameOf(m.redParticipantId);
-			return {
-				orderNo: m.orderNo,
-				roundLabel: m.roundLabel,
-				format: m.format,
-				state: m.state,
-				bracket: m.bracket,
-				roundNo: m.roundNo,
-				blueName: blue?.name ?? null,
-				redName: red?.name ?? null,
-				blueDoro: blue?.doroSlug ?? null,
-				redDoro: red?.doroSlug ?? null,
-				scoreBlue: m.scoreBlue,
-				scoreRed: m.scoreRed,
-				winnerSide: m.winnerSide,
-				hasOpenMarket: allMarkets.some((mk) => mk.matchId === m.id && mk.state === 'open')
-			};
-		});
+	const nodes: BracketNode[] = shown.map((m) => {
+		const blue = nameOf(m.blueParticipantId);
+		const red = nameOf(m.redParticipantId);
+		return {
+			orderNo: m.orderNo,
+			roundLabel: m.roundLabel,
+			format: m.format,
+			state: m.state,
+			bracket: m.bracket,
+			roundNo: m.roundNo,
+			blueName: blue?.name ?? null,
+			redName: red?.name ?? null,
+			blueDoro: blue?.doroSlug ?? null,
+			redDoro: red?.doroSlug ?? null,
+			scoreBlue: m.scoreBlue,
+			scoreRed: m.scoreRed,
+			winnerSide: m.winnerSide,
+			hasOpenMarket: allMarkets.some((mk) => mk.matchId === m.id && mk.state === 'open'),
+			col: col.get(m.orderNo) ?? 0,
+			winnerTo:
+				m.winnerToMatchNo !== null && m.winnerToSlot
+					? { matchNo: m.winnerToMatchNo, slot: m.winnerToSlot }
+					: null,
+			loserTo:
+				m.loserToMatchNo !== null && m.loserToSlot
+					? { matchNo: m.loserToMatchNo, slot: m.loserToSlot }
+					: null
+		};
+	});
 
-	/** 依 bracket 分組，每組再依輪次切成一欄一欄 */
-	const group = (name: string) => {
-		const inBracket = nodes.filter((n) => n.bracket === name);
-		const rounds = [...new Set(inBracket.map((n) => n.roundNo))].sort((a, b) => a - b);
-		return rounds.map((r) => ({
-			roundNo: r,
-			label: inBracket.find((n) => n.roundNo === r)?.roundLabel ?? '',
-			matches: inBracket.filter((n) => n.roundNo === r)
-		}));
-	};
+	const cols = nodes.length ? Math.max(...nodes.map((n) => n.col)) + 1 : 0;
 
-	return { winners: group('winners'), losers: group('losers'), final: group('final') };
+	/**
+	 * 冠軍。
+	 *
+	 * 不能看到總決賽有勝方就直接定冠軍 —— 雙敗淘汰裡，
+	 * 勝部冠軍還沒輸過，敗部冠軍已經輸一場。敗部冠軍贏下總決賽只是
+	 * 把兩人拉到同一條起跑線，必須再加賽一場。
+	 *
+	 * 判斷方式不寫死「紅方來自敗部」，而是回頭看晉級關係：
+	 * 勝方那一格是由哪一場送上來的？若來自敗部，就還差一場加賽。
+	 * 這樣賽程重新排過也不用改這段。
+	 */
+	const finals = nodes.filter((n) => n.bracket === 'final').sort((a, b) => b.orderNo - a.orderNo);
+	const last = finals[0] ?? null;
+
+	/** 送進 (場次, 那一側) 的來源場次 */
+	const feederOf = (matchNo: number, slot: string) =>
+		nodes.find(
+			(n) =>
+				(n.winnerTo?.matchNo === matchNo && n.winnerTo.slot === slot) ||
+				(n.loserTo?.matchNo === matchNo && n.loserTo.slot === slot)
+		) ?? null;
+
+	const pendingReset =
+		last && last.winnerSide
+			? feederOf(last.orderNo, last.winnerSide)?.bracket === 'losers'
+			: false;
+
+	const champion =
+		last && last.winnerSide && !pendingReset
+			? {
+					name: (last.winnerSide === 'blue' ? last.blueName : last.redName) ?? '',
+					doro: (last.winnerSide === 'blue' ? last.blueDoro : last.redDoro) ?? null
+				}
+			: null;
+
+	return { nodes, cols, championCol: cols, champion, pendingReset };
 }
 
 /** 賽況資訊區用：參賽者與主持群，含立繪與頻道連結。 */

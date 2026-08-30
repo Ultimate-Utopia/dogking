@@ -1,7 +1,9 @@
 /* 賽程樹。
-   欄位是「輪次」，每欄由上而下排該輪的場次。
-   手機放不下十幾場，所以整塊可橫向捲動 —— 讓它自己滾，
-   不要壓縮成看不懂的小方塊。 */
+   欄位＝「這一場最早能在第幾輪開打」，由伺服器依晉級關係算出。
+   勝部排上排、敗部排下排、決賽與冠軍自己一排。
+
+   手機放不下十幾場，所以整塊可橫向捲動 ——
+   讓它自己滾，不要壓縮成看不懂的小方塊。 */
 
 .bracket-wrap {
 	overflow-x: auto;
@@ -9,60 +11,74 @@
 	-webkit-overflow-scrolling: touch;
 }
 
-.bracket-group {
-	margin-bottom: 22px;
-}
-.bracket-group:last-child {
-	margin-bottom: 0;
-}
-
-.bracket-title {
-	font-size: 15px;
-	font-weight: 700;
-	margin: 0 0 10px;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.bracket-title .side-dot {
-	width: 9px;
-	height: 9px;
-	border-radius: 50%;
-}
-.bracket-title.w .side-dot {
-	background: var(--blue);
-}
-.bracket-title.l .side-dot {
-	background: var(--red);
-}
-.bracket-title.f .side-dot {
-	background: var(--ok);
-}
-
-.rounds {
-	display: flex;
-	gap: 14px;
-	align-items: flex-start;
+.bracket-grid {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(var(--cols), 172px);
+	gap: 18px 26px;
+	align-items: start;
 	min-width: min-content;
+	padding: 2px 0 4px;
 }
 
-.round-col {
+/* ── 連線 ─────────────────────────────────────────
+   絕對定位鋪在整張 grid 上，畫在節點底下且不吃點擊。 */
+.bracket-lines {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 0;
+	overflow: visible;
+}
+.ln {
+	fill: none;
+	stroke-width: 1.5;
+}
+.ln.win {
+	stroke: color-mix(in srgb, var(--blue) 55%, transparent);
+}
+/* 敗者的去向用虛線，跟晉級線區分開來 —— 它們常常交錯在一起 */
+.ln.lose {
+	stroke: color-mix(in srgb, var(--red) 42%, transparent);
+	stroke-dasharray: 4 4;
+}
+.ln.champ {
+	stroke: var(--ok);
+	stroke-width: 2;
+}
+
+/* ── 一格（同排同欄）───────────────────────────── */
+.cell {
+	position: relative;
+	z-index: 1;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	min-width: 168px;
+	min-width: 0;
+}
+.cell.w {
+	grid-row: 1;
+}
+.cell.l {
+	grid-row: 2;
+}
+/* 決賽與冠軍跨兩排並置中，視覺上就在勝部與敗部中間 */
+.cell.f {
+	grid-row: 1 / span 2;
+	align-self: center;
 }
 
-.round-head {
+.cell-head {
 	font-family: var(--mono);
 	font-size: 10.5px;
-	letter-spacing: 0.12em;
+	letter-spacing: 0.1em;
 	color: var(--muted);
 	white-space: nowrap;
-	padding-bottom: 2px;
+	padding-bottom: 3px;
 	border-bottom: 1px solid var(--line);
 }
 
+/* ── 一場比賽 ─────────────────────────────────── */
 .node {
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -122,7 +138,6 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--muted);
 }
-/* 勝方標記：只有比完才會出現 */
 .slot.won .nm {
 	font-weight: 700;
 }
@@ -135,7 +150,6 @@
 }
 .slot .tbd {
 	color: var(--muted);
-	font-style: normal;
 }
 
 .slot .pip {
@@ -143,8 +157,7 @@
 	align-self: stretch;
 	border-radius: 2px;
 	flex: none;
-	margin: -6px 0 -6px -9px;
-	margin-right: 4px;
+	margin: -6px 4px -6px -9px;
 }
 .slot.b .pip {
 	background: var(--blue);
@@ -153,9 +166,79 @@
 	background: var(--red);
 }
 
+/* ── 冠軍 ─────────────────────────────────────── */
+.champ {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 12px 13px;
+	border: 2px dashed var(--line);
+	border-radius: 10px;
+	background: var(--surface);
+}
+.champ.decided {
+	border-style: solid;
+	border-color: var(--ok);
+	background: color-mix(in srgb, var(--ok) 8%, var(--surface));
+}
+.champ .crown {
+	font-size: 19px;
+	line-height: 1;
+	filter: grayscale(1);
+	opacity: 0.45;
+}
+.champ.decided .crown {
+	filter: none;
+	opacity: 1;
+}
+.champ img {
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	background: var(--paper);
+	flex: none;
+}
+.champ-name {
+	font-size: 15px;
+	font-weight: 800;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.champ.decided .champ-name {
+	color: var(--ok);
+}
+.champ .tbd {
+	font-weight: 600;
+	color: var(--muted);
+}
+
+/* ── 圖例 ─────────────────────────────────────── */
 .bracket-hint {
 	font-size: 12.5px;
 	color: var(--muted);
-	margin: 10px 0 0;
-	line-height: 1.7;
+	margin: 12px 0 0;
+	line-height: 1.9;
+}
+.bracket-hint .key {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-right: 14px;
+	white-space: nowrap;
+}
+.bracket-hint .s {
+	display: inline-block;
+	width: 18px;
+	height: 0;
+	border-top-width: 2px;
+}
+.bracket-hint .s.win {
+	border-top-style: solid;
+	border-top-color: color-mix(in srgb, var(--blue) 55%, transparent);
+}
+.bracket-hint .s.lose {
+	border-top-style: dashed;
+	border-top-color: color-mix(in srgb, var(--red) 42%, transparent);
 }
