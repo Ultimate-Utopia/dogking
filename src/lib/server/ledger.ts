@@ -7,7 +7,7 @@
 
 import { sql, eq, desc } from 'drizzle-orm';
 import { db } from './db';
-import { ledger, users, type LedgerType } from './db/schema';
+import { ledger, users, markets, matches, type LedgerType } from './db/schema';
 
 /** Drizzle 交易物件，或頂層 db。讓這些函式能被包在更大的交易裡重用。 */
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -90,4 +90,71 @@ export async function getHistory(userId: string, limit = 50) {
 		.where(eq(ledger.userId, userId))
 		.orderBy(desc(ledger.id))
 		.limit(limit);
+}
+
+/** 帳本類型對觀眾的說法。資料庫存英文，畫面不該露出來。 */
+const TYPE_LABEL: Record<string, string> = {
+	signup: '註冊贈幣',
+	purchase: '周邊發幣',
+	bet: '下注',
+	payout: '派彩',
+	refund: '退款',
+	adjust: '人工調整'
+};
+
+export interface CoinHistoryRow {
+	id: number;
+	type: string;
+	/** 中文類型名稱 */
+	label: string;
+	/** 有號數。下注為負，派彩為正。 */
+	amount: number;
+	balanceAfter: number;
+	note: string | null;
+	createdAt: string;
+	/** 下注與派彩才有。用來讓觀眾知道是哪一場。 */
+	matchOrderNo: number | null;
+	roundLabel: string | null;
+	gameNo: number | null;
+}
+
+/**
+ * 「狗狗幣從哪來、到哪去」—— 企劃書 §一要求要能給觀眾看。
+ *
+ * 下注與派彩帶上場次與盤口，否則列表上會是一連串
+ * 分不出來的「下注 −500」，觀眾根本對不上賬。
+ * 帳本只存 ref_market_id，因此需要 join 回 markets 與 matches。
+ */
+export async function getCoinHistory(userId: string, limit = 60): Promise<CoinHistoryRow[]> {
+	const rows = await db
+		.select({
+			id: ledger.id,
+			type: ledger.type,
+			amount: ledger.amount,
+			balanceAfter: ledger.balanceAfter,
+			note: ledger.note,
+			createdAt: ledger.createdAt,
+			gameNo: markets.gameNo,
+			matchOrderNo: matches.orderNo,
+			roundLabel: matches.roundLabel
+		})
+		.from(ledger)
+		.leftJoin(markets, eq(ledger.refMarketId, markets.id))
+		.leftJoin(matches, eq(markets.matchId, matches.id))
+		.where(eq(ledger.userId, userId))
+		.orderBy(desc(ledger.id))
+		.limit(limit);
+
+	return rows.map((r) => ({
+		id: r.id,
+		type: r.type,
+		label: TYPE_LABEL[r.type] ?? r.type,
+		amount: r.amount,
+		balanceAfter: r.balanceAfter,
+		note: r.note,
+		createdAt: r.createdAt.toISOString(),
+		matchOrderNo: r.matchOrderNo ?? null,
+		roundLabel: r.roundLabel ?? null,
+		gameNo: r.gameNo ?? null
+	}));
 }

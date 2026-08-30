@@ -1,0 +1,216 @@
+/* 周邊發幣作業手冊。
+   讀者是活動當天才第一次碰後台的人，所以行距、字級都放寬，
+   重點用色塊圈起來，不要求他從一整段文字裡自己找到關鍵句。 */
+
+.lede {
+	font-size: 15px;
+	line-height: 1.9;
+	margin: 0 0 16px;
+}
+
+/* ── 兩條路徑 ─────────────────────────────────────── */
+.path {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 14px;
+}
+.path-card {
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 14px 16px 16px;
+	background: var(--paper);
+}
+.path-card.main {
+	border-color: var(--ok);
+}
+.path-card.alt {
+	border-color: var(--blue);
+}
+.path-tag {
+	display: inline-block;
+	font-size: 11.5px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	padding: 3px 9px;
+	border-radius: 5px;
+	margin-bottom: 10px;
+}
+.path-card.main .path-tag {
+	background: color-mix(in srgb, var(--ok) 16%, transparent);
+	color: var(--ok);
+}
+.path-card.alt .path-tag {
+	background: color-mix(in srgb, var(--blue) 16%, transparent);
+	color: var(--blue);
+}
+.path-card ol {
+	margin: 0;
+	padding-left: 20px;
+	line-height: 1.95;
+	font-size: 14px;
+}
+.path-note {
+	margin: 12px 0 0;
+	font-size: 13px;
+	color: var(--muted);
+	line-height: 1.75;
+}
+
+/* ── 可直接複製的文案 ─────────────────────────────── */
+.say {
+	margin: 18px 0 16px;
+}
+.say-tag {
+	display: block;
+	font-size: 12.5px;
+	color: var(--muted);
+	margin-bottom: 7px;
+}
+.say pre {
+	margin: 0;
+	background: var(--paper);
+	border: 1px dashed var(--line);
+	border-radius: 9px;
+	padding: 15px 17px;
+	font-family: inherit;
+	font-size: 14px;
+	line-height: 1.9;
+	white-space: pre-wrap;
+	user-select: all;
+}
+
+/* ── 警告與提示 ───────────────────────────────────── */
+.warn-box {
+	border: 1px solid var(--red);
+	border-radius: 9px;
+	padding: 13px 16px;
+	background: color-mix(in srgb, var(--red) 6%, transparent);
+}
+.warn-title {
+	display: block;
+	font-weight: 700;
+	color: var(--red);
+	margin-bottom: 8px;
+	font-size: 14px;
+}
+.warn-box ul {
+	margin: 0;
+	padding-left: 20px;
+	line-height: 1.95;
+	font-size: 14px;
+}
+
+.tip {
+	margin-top: 16px;
+	border-left: 3px solid var(--blue);
+	padding: 3px 0 3px 14px;
+}
+.tip-title {
+	display: block;
+	font-weight: 700;
+	font-size: 14px;
+	margin-bottom: 5px;
+}
+.tip p {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.85;
+	color: var(--muted);
+}
+
+/* ── 步驟 ─────────────────────────────────────────── */
+.steps {
+	margin: 0;
+	padding-left: 22px;
+	font-size: 14.5px;
+	line-height: 1.9;
+}
+.steps > li {
+	margin-bottom: 15px;
+}
+.steps > li:last-child {
+	margin-bottom: 0;
+}
+.steps li::marker {
+	color: var(--blue);
+	font-weight: 700;
+}
+
+/* 欄位名稱標籤，讓「要哪三欄」一眼可見 */
+.need {
+	display: inline-block;
+	font-size: 13px;
+	font-weight: 600;
+	padding: 2px 9px;
+	margin: 2px 4px 2px 0;
+	border-radius: 5px;
+	background: var(--paper);
+	border: 1px solid var(--line);
+	white-space: nowrap;
+}
+
+/* ── 狀態色塊 ─────────────────────────────────────── */
+.st {
+	display: inline-block;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 3px 9px;
+	border-radius: 5px;
+	white-space: nowrap;
+}
+.st.ready {
+	background: color-mix(in srgb, var(--ok) 16%, transparent);
+	color: var(--ok);
+}
+.st.bad {
+	background: color-mix(in srgb, var(--red) 14%, transparent);
+	color: var(--red);
+}
+.st.done {
+	background: var(--paper);
+	color: var(--muted);
+}
+
+/* ── 原則 ─────────────────────────────────────────── */
+.rules {
+	margin: 0;
+	padding-left: 20px;
+	font-size: 14.5px;
+	line-height: 1.9;
+}
+.rules > li {
+	margin-bottom: 13px;
+}
+.rules > li:last-child {
+	margin-bottom: 0;
+}
+
+/* ── 問答 ─────────────────────────────────────────── */
+.qa .q {
+	margin: 0 0 4px;
+	font-weight: 700;
+	font-size: 14.5px;
+}
+.qa .a {
+	margin: 0 0 16px;
+	font-size: 14px;
+	line-height: 1.85;
+	color: var(--muted);
+}
+.qa .a:last-child {
+	margin-bottom: 0;
+}
+
+.foot-note {
+	font-size: 13px;
+	color: var(--muted);
+	margin: 22px 0 0;
+}
+
+code {
+	font-family: var(--mono);
+	font-size: 0.94em;
+	background: var(--paper);
+	padding: 1px 5px;
+	border-radius: 4px;
+}

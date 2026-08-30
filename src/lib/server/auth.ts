@@ -49,7 +49,7 @@ export async function upsertUserFromDiscord(profile: DiscordProfile): Promise<Se
 
 		if (existing) {
 			// 暱稱和頭像可能改過，每次登入同步一次。
-			// 順便補上公開代碼，讓這個欄位新增之前就註冊的人也有。
+			// 順便補上訂單備註碼，讓這個欄位新增之前就註冊的人也有。
 			const [updated] = await tx
 				.update(users)
 				.set({

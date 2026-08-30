@@ -312,7 +312,7 @@ export const purchaseOrders = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────
-// redeem_codes —— 兌換碼（規格書 §08 補救路徑）
+// redeem_codes —— 兌換券（規格書 §08 補救路徑）
 // 用於買家漏填網站 ID 時發幣，此路徑不需要知道買家身分。
 // ─────────────────────────────────────────────────────────
 export const redeemCodes = pgTable('redeem_codes', {

@@ -1,9 +1,9 @@
 /**
- * 周邊訂單發幣與兌換碼 —— 對應規格書 §08
+ * 周邊訂單發幣與兌換券 —— 對應規格書 §08
  *
  * 兩條路徑：
- *   主線  買家在訂單備註填自己的公開代碼 → 後台匯入 CSV → 比對 → 一鍵發幣
- *   補救  買家忘了填 → 後台產生兌換碼 → 客服用訂單留言發給他 → 自行輸入
+ *   主線  買家在訂單備註填自己的訂單備註碼 → 後台匯入 CSV → 比對 → 一鍵發幣
+ *   補救  買家忘了填 → 後台產生兌換券 → 客服用訂單留言發給他 → 自行輸入
  *
  * 補救路徑刻意不需要知道買家是誰，所以連個資都不用碰。
  */
@@ -32,14 +32,14 @@ export class PurchaseError extends Error {
 }
 
 // ─────────────────────────────────────────────────────────
-// 公開代碼
+// 訂單備註碼
 // ─────────────────────────────────────────────────────────
 
 /** Drizzle 交易物件，或頂層 db。 */
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * 產生一組沒被用過的公開代碼。碰撞就重試。
+ * 產生一組沒被用過的訂單備註碼。碰撞就重試。
  *
  * ⚠️ 在交易裡呼叫時務必把 tx 傳進來。
  * 用頂層的 db 會另外向連線池要一條連線，而外層交易正握著一條 ——
@@ -51,7 +51,7 @@ export async function generatePublicCode(tx: Executor = db): Promise<string> {
 		const [taken] = await tx.select().from(users).where(eq(users.publicCode, code)).limit(1);
 		if (!taken) return code;
 	}
-	throw new PurchaseError('無法產生公開代碼，請再試一次');
+	throw new PurchaseError('無法產生訂單備註碼，請再試一次');
 }
 
 /** 補發代碼給還沒有的帳號（例如這個欄位新增之前就註冊的人）。 */
@@ -134,7 +134,7 @@ export interface ImportRow {
 }
 
 /**
- * 從備註欄抓出公開代碼。
+ * 從備註欄抓出訂單備註碼。
  *
  * 買家不會乖乖只填代碼，實際會出現「代碼:K7M2QX」「我的ID K7M2QX 謝謝」
  * 這類寫法，所以抓連續 6 個合法字元就好。
@@ -248,7 +248,7 @@ export async function commitImport(platform: string, rows: ImportRow[], adminUse
 }
 
 // ─────────────────────────────────────────────────────────
-// 兌換碼
+// 兌換券
 // ─────────────────────────────────────────────────────────
 
 export async function createRedeemCodes(count: number, amount: number, orderRef?: string) {
@@ -261,7 +261,7 @@ export async function createRedeemCodes(count: number, amount: number, orderRef?
 
 	const created: string[] = [];
 	for (let i = 0; i < count; i++) {
-		// 兌換碼比公開代碼長，因為它等同於現金
+		// 兌換券比訂單備註碼長，因為它等同於現金
 		const code = `${randomCode(4)}-${randomCode(4)}-${randomCode(4)}`;
 		await db.insert(redeemCodes).values({ code, amount, orderRef: orderRef || null });
 		created.push(code);
@@ -272,7 +272,7 @@ export async function createRedeemCodes(count: number, amount: number, orderRef?
 /** 兌換。已使用或不存在都回同一種錯誤訊息，避免被拿來猜碼。 */
 export async function redeem(userId: string, rawCode: string) {
 	const code = rawCode.trim().toUpperCase().replace(/\s/g, '');
-	if (!code) throw new PurchaseError('請輸入兌換碼');
+	if (!code) throw new PurchaseError('請輸入兌換券碼');
 
 	return db.transaction(async (tx) => {
 		const [row] = await tx
@@ -283,7 +283,7 @@ export async function redeem(userId: string, rawCode: string) {
 			.limit(1);
 
 		if (!row || row.usedByUserId) {
-			throw new PurchaseError('兌換碼無效或已被使用');
+			throw new PurchaseError('兌換券碼無效或已被使用');
 		}
 
 		await tx
@@ -296,7 +296,7 @@ export async function redeem(userId: string, rawCode: string) {
 			userId,
 			type: 'purchase',
 			amount: row.amount,
-			note: `兌換碼 ${code}`
+			note: `兌換券 ${code}`
 		});
 
 		return row.amount;

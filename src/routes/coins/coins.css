@@ -103,7 +103,7 @@
 	font-weight: 700;
 }
 
-/* ── 兌換碼 ───────────────────────────────────────── */
+/* ── 兌換券 ───────────────────────────────────────── */
 .redeem-row {
 	display: flex;
 	gap: 10px;
@@ -136,4 +136,102 @@
 	background: var(--ok);
 	color: #fff;
 	cursor: pointer;
+}
+
+/* ── 狗狗幣紀錄 ───────────────────────────────────────
+   一列五格：類型、說明、金額、餘額、時間。
+   窄螢幕折成兩行（說明另起一行），金額與餘額不換行，
+   因為觀眾就是來核對數字的。 */
+
+.hist-row {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto;
+	grid-template-areas: 'tag what amt after' 'tag what time time';
+	align-items: center;
+	column-gap: 10px;
+	padding: 9px 0;
+	border-top: 1px solid var(--line);
+	font-size: 14px;
+}
+.hist-row:first-child {
+	border-top: none;
+	padding-top: 0;
+}
+
+.hist-tag {
+	grid-area: tag;
+	font-size: 11.5px;
+	font-weight: 700;
+	padding: 3px 8px;
+	border-radius: 5px;
+	white-space: nowrap;
+	background: var(--paper);
+	color: var(--muted);
+}
+.hist-tag.up {
+	background: color-mix(in srgb, var(--ok) 14%, transparent);
+	color: var(--ok);
+}
+.hist-tag.down {
+	background: color-mix(in srgb, var(--red) 13%, transparent);
+	color: var(--red);
+}
+.hist-tag.note {
+	background: color-mix(in srgb, var(--blue) 13%, transparent);
+	color: var(--blue);
+}
+
+.hist-what {
+	grid-area: what;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--muted);
+}
+
+.hist-amt {
+	grid-area: amt;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+	white-space: nowrap;
+	color: var(--muted);
+}
+.hist-amt.up {
+	color: var(--ok);
+}
+.hist-amt.down {
+	color: var(--red);
+}
+
+.hist-after {
+	grid-area: after;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 12px;
+	color: var(--muted);
+	white-space: nowrap;
+	min-width: 76px;
+	text-align: right;
+}
+
+.hist-time {
+	grid-area: time;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--muted);
+	text-align: right;
+}
+
+/* 很窄的手機：餘額換到第二行，跟時間並排 */
+@media (max-width: 460px) {
+	.hist-row {
+		grid-template-columns: auto 1fr auto;
+		grid-template-areas: 'tag what amt' 'tag time after';
+		row-gap: 2px;
+	}
+	.hist-time {
+		text-align: left;
+	}
 }

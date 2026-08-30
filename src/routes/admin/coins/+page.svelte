@@ -22,20 +22,20 @@
 	const problemRows = $derived(preview?.filter((r) => r.status !== 'ready') ?? []);
 </script>
 
-<p style="margin:0 0 10px"><a href="/admin">← 回場次總覽</a></p>
+<p style="margin:0 0 10px"><a href="/admin">← 回場次總覽</a>　<a href="/admin/handbook">發幣作業手冊</a></p>
 <h1>狗狗幣發放</h1>
 <p class="hint">
 	換算比例 NT$1 = {data.rate} 狗狗幣。主線是匯入訂單 CSV 自動比對，
-	買家漏填代碼時改用兌換碼補救。
+	買家漏填備註碼時改發兌換券補救。
 </p>
 
 {#if form?.error}<div class="err">{form.error}</div>{/if}
 {#if form?.success}<div class="ok-msg">{form.success}</div>{/if}
 
-<!-- ── 產生出來的兌換碼 ──────────────────────────────── -->
+<!-- ── 產生出來的兌換券 ──────────────────────────────── -->
 {#if form && 'codes' in form && form.codes}
 	<div class="panel" style="border-color:var(--ok)">
-		<h2 style="margin:0 0 10px">新產生的兌換碼</h2>
+		<h2 style="margin:0 0 10px">新產生的兌換券</h2>
 		<p class="hint" style="margin:0 0 12px">
 			請立刻複製保存 —— 這是唯一一次完整顯示的機會，之後只會列在下方未使用清單。
 		</p>
@@ -83,7 +83,7 @@
 
 		{#if problemRows.length}
 			<p class="warn">
-				對不到帳號的訂單，請用下方「產生兌換碼」開對應面額的碼，再用訂單留言發給買家。
+				對不到帳號的訂單，請用下方「產生兌換券」開對應面額的券，再用訂單留言發給買家。
 			</p>
 		{/if}
 
@@ -159,11 +159,11 @@
 	</form>
 </div>
 
-<!-- ── 兌換碼 ────────────────────────────────────────── -->
-<h2>產生兌換碼</h2>
+<!-- ── 兌換券 ────────────────────────────────────────── -->
+<h2>產生兌換券</h2>
 <div class="panel">
 	<p class="hint" style="margin:0 0 14px">
-		給漏填代碼的買家用。這條路徑不需要知道買家是誰 —— 直接用訂單留言把碼發給他即可。
+		給漏填備註碼的買家用。這條路徑不需要知道買家是誰 —— 直接用訂單留言把券碼發給他即可。
 	</p>
 	<form method="POST" action="?/makeCodes" class="field-row">
 		<div class="field">
@@ -188,14 +188,14 @@
 	</div>
 </div>
 
-<!-- ── 未使用的兌換碼 ────────────────────────────────── -->
+<!-- ── 未使用的兌換券 ────────────────────────────────── -->
 {#if data.codes.length}
-	<h2>未使用的兌換碼</h2>
+	<h2>未使用的兌換券</h2>
 	<div class="panel">
 		<div class="scrollable">
 			<table>
 				<thead>
-					<tr><th>兌換碼</th><th style="text-align:right">面額</th><th>對應訂單</th><th>產生時間</th></tr>
+					<tr><th>兌換券碼</th><th style="text-align:right">面額</th><th>對應訂單</th><th>產生時間</th></tr>
 				</thead>
 				<tbody>
 					{#each data.codes as c (c.code)}
@@ -247,9 +247,9 @@
 <h2>維護</h2>
 <div class="panel">
 	<p class="hint" style="margin:0 0 12px">
-		公開代碼是在註冊時產生的。若有帳號因為某些原因還沒有代碼，用這個補發。
+		訂單備註碼是在註冊時產生的。若有帳號因為某些原因還沒有代碼，用這個補發。
 	</p>
 	<form method="POST" action="?/backfill">
-		<button class="b b-quiet" style="flex:0" type="submit">補發公開代碼</button>
+		<button class="b b-quiet" style="flex:0" type="submit">補發訂單備註碼</button>
 	</form>
 </div>

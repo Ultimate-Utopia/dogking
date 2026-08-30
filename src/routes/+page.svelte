@@ -590,6 +590,9 @@
 				{:else}
 					<p style="margin:0;color:var(--muted)">還沒有下注紀錄。</p>
 				{/each}
+				<p style="margin:12px 0 0;font-size:12px">
+					<a href="/coins">看完整的狗狗幣紀錄 →</a>
+				</p>
 			{/if}
 		</div>
 	</div>

@@ -92,19 +92,19 @@ export const actions: Actions = {
 
 		try {
 			const codes = await createRedeemCodes(count, amount, orderRef || undefined);
-			await logAdmin(admin.id, '產生兌換碼', `${count} 組 × ${amount}`, { orderRef });
-			return { codes, success: `已產生 ${codes.length} 組兌換碼` };
+			await logAdmin(admin.id, '產生兌換券', `${count} 組 × ${amount}`, { orderRef });
+			return { codes, success: `已產生 ${codes.length} 組兌換券` };
 		} catch (e) {
 			if (e instanceof PurchaseError) return fail(400, { error: e.message });
 			return fail(400, { error: '產生失敗' });
 		}
 	},
 
-	/** 補發公開代碼給還沒有的帳號。 */
+	/** 補發訂單備註碼給還沒有的帳號。 */
 	backfill: async ({ locals }) => {
 		const admin = requireAdmin(locals.user);
 		const n = await backfillPublicCodes();
-		await logAdmin(admin.id, '補發公開代碼', `${n} 個帳號`);
+		await logAdmin(admin.id, '補發訂單備註碼', `${n} 個帳號`);
 		return { success: n > 0 ? `已補發 ${n} 個帳號的代碼` : '所有帳號都已經有代碼了' };
 	}
 };
