@@ -12,14 +12,51 @@
 		'no-code': { label: '沒填代碼', cls: 't-locked' },
 		'unknown-code': { label: '查無此代碼', cls: 't-void' },
 		'already-credited': { label: '已發放過', cls: 't-settled' },
-		'bad-amount': { label: '金額有問題', cls: 't-void' }
+		'bad-amount': { label: '金額有問題', cls: 't-void' },
+		'not-paid': { label: '尚未付款', cls: 't-settled' },
+		cancelled: { label: '已取消', cls: 't-settled' },
+		merged: { label: '已併入其他訂單', cls: 't-settled' }
 	};
+
+	/** 這幾種是平台上的狀態造成的，不是操作員要處理的問題，等付款後重匯即可 */
+	const WAITING = new Set(['not-paid', 'cancelled', 'merged', 'already-credited']);
+
+	let csvText = $state('');
+	let fileName = $state('');
+	let fileError = $state('');
+
+	/**
+	 * 讀取選擇的檔案，放進下方的文字框。
+	 *
+	 * 先當 UTF-8 解，解不開再試 Big5 —— 賣貨便的 CSV 是 UTF-8，
+	 * 但舊版 Excel 另存的 CSV 常常是 Big5，直接當 UTF-8 讀會變亂碼。
+	 * 伺服器端完全不變：拿到的一樣是文字，和手動貼上走同一條路。
+	 */
+	async function readFile(e: Event) {
+		fileError = '';
+		const file = (e.currentTarget as HTMLInputElement).files?.[0];
+		if (!file) return;
+		if (/\.xlsx?$/i.test(file.name)) {
+			fileError = '目前只能讀 CSV。請用 Excel 或 Google 試算表打開後「另存為 CSV」再選一次。';
+			return;
+		}
+		const bytes = new Uint8Array(await file.arrayBuffer());
+		try {
+			csvText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		} catch {
+			csvText = new TextDecoder('big5').decode(bytes);
+		}
+		fileName = file.name;
+	}
 
 	const ctx = $derived(form && 'imported' in form ? form.imported : null);
 	const preview = $derived(ctx?.preview ?? null);
 	const readyRows = $derived(preview?.filter((r) => r.status === 'ready') ?? []);
 	const readyChips = $derived(readyRows.reduce((a, r) => a + r.chips, 0));
-	const problemRows = $derived(preview?.filter((r) => r.status !== 'ready') ?? []);
+	const problemRows = $derived(
+		preview?.filter((r) => r.status !== 'ready' && !WAITING.has(r.status)) ?? []
+	);
+	const waitingRows = $derived(preview?.filter((r) => WAITING.has(r.status)) ?? []);
 </script>
 
 <p style="margin:0 0 10px"><a href="/admin">← 回場次總覽</a>　<a href="/admin/handbook">發幣作業手冊</a></p>
@@ -48,10 +85,18 @@
 {#if preview}
 	<div class="confirm">
 		<h3>匯入預覽 —— 尚未發放</h3>
+		{#if ctx?.format === 'myship'}
+			<p class="hint" style="margin:0 0 8px">
+				已辨識為<strong>賣貨便匯出檔</strong>：只發放已付款的訂單，計幣金額<strong>不含運費</strong>。
+			</p>
+		{/if}
 		<p class="warn">
 			共 {preview.length} 筆，其中 <strong>{readyRows.length} 筆可發放</strong>，
 			合計 <strong>{fmt(readyChips)}</strong> 狗狗幣。
-			{#if problemRows.length}另有 {problemRows.length} 筆需要處理。{/if}
+			{#if problemRows.length}有 {problemRows.length} 筆需要處理。{/if}
+			{#if waitingRows.length}
+				另有 {waitingRows.length} 筆未付款、已取消、已合併或已發過，這次不會發，之後重匯同一份檔案也不會重複。
+			{/if}
 		</p>
 
 		<div style="max-height:340px;overflow:auto;margin-bottom:16px">
@@ -59,7 +104,8 @@
 				<thead>
 					<tr>
 						<th>訂單編號</th>
-						<th>金額</th>
+						<th>平台狀態</th>
+						<th>計幣金額</th>
 						<th>備註中的代碼</th>
 						<th>對應帳號</th>
 						<th style="text-align:right">狗狗幣</th>
@@ -70,7 +116,10 @@
 					{#each preview as r, i (i)}
 						<tr>
 							<td style="font-family:var(--mono);font-size:12.5px">{r.orderRef}</td>
-							<td class="n">{r.amountTwd}</td>
+							<td style="font-size:12.5px;white-space:nowrap">{r.statusText || '—'}</td>
+							<td class="n" title={r.totalTwd !== r.amountTwd ? `實付 ${r.totalTwd}（含運費）` : ''}>
+								{Number.isFinite(r.amountTwd) ? fmt(r.amountTwd) : '—'}
+							</td>
 							<td style="font-family:var(--mono)">{r.code ?? '—'}</td>
 							<td>{r.displayName ?? '—'}</td>
 							<td class="n">{r.status === 'ready' ? fmt(r.chips) : '—'}</td>
@@ -111,51 +160,69 @@
 {/if}
 
 <!-- ── 匯入表單 ──────────────────────────────────────── -->
-<h2>匯入訂單 CSV</h2>
+<h2>匯入訂單</h2>
 <div class="panel">
 	<p class="hint" style="margin:0 0 14px">
-		從賣貨便或綠界後台匯出訂單，用試算表打開後<strong>整份複製貼上</strong>即可 ——
-		這樣不會有編碼問題。下方的欄位順序請對照你貼上的內容調整（第一欄是 0）。
+		選擇從賣貨便匯出的 CSV 就好，系統會自動辨識欄位、只挑出已付款的訂單。
+		<strong>按下預覽不會發任何幣。</strong>
+		同一份檔案重複匯入是安全的，已發過的訂單會自動略過。
 	</p>
 
 	<form method="POST" action="?/preview">
-		<div class="field-row" style="margin-bottom:12px">
-			<div class="field">
-				<label for="pf">來源平台</label>
-				<select id="pf" name="platform">
-					<option value="賣貨便">賣貨便</option>
-					<option value="綠界">綠界</option>
-					<option value="其他">其他</option>
-				</select>
-			</div>
-			<div class="field">
-				<label for="c1">訂單編號欄</label>
-				<input id="c1" name="colOrderRef" type="number" min="0" value="0" style="width:110px" />
-			</div>
-			<div class="field">
-				<label for="c2">金額欄</label>
-				<input id="c2" name="colAmount" type="number" min="0" value="1" style="width:110px" />
-			</div>
-			<div class="field">
-				<label for="c3">備註欄</label>
-				<input id="c3" name="colNote" type="number" min="0" value="2" style="width:110px" />
-			</div>
-			<div class="field">
-				<label for="hh">第一列是標題</label>
-				<label style="display:flex;align-items:center;gap:7px;height:39px;font-size:14px">
-					<input id="hh" name="hasHeader" type="checkbox" checked /> 是
-				</label>
-			</div>
+		<div class="field-row" style="margin-bottom:12px;align-items:center">
+			<input type="file" accept=".csv,text/csv" onchange={readFile} />
+			{#if fileName}<span class="hint" style="margin:0">已讀取：{fileName}</span>{/if}
 		</div>
+		{#if fileError}<div class="err" style="margin-bottom:12px">{fileError}</div>{/if}
+
+		<details style="margin-bottom:12px">
+			<summary class="hint" style="cursor:pointer;margin:0">
+				不是賣貨便的檔案？手動指定欄位，或直接貼上內容
+			</summary>
+			<p class="hint" style="margin:10px 0">
+				認不出格式時才會用到這裡。欄位位置從 0 開始數（最左邊那欄是 0）。
+				<strong>這種模式看不到付款狀態，請先自行篩出已付款的訂單。</strong>
+			</p>
+			<div class="field-row" style="margin-bottom:12px">
+				<div class="field">
+					<label for="pf">來源平台</label>
+					<select id="pf" name="platform">
+						<option value="綠界">綠界</option>
+						<option value="其他">其他</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="c1">訂單編號欄</label>
+					<input id="c1" name="colOrderRef" type="number" min="0" value="0" style="width:110px" />
+				</div>
+				<div class="field">
+					<label for="c2">金額欄</label>
+					<input id="c2" name="colAmount" type="number" min="0" value="1" style="width:110px" />
+				</div>
+				<div class="field">
+					<label for="c3">備註欄</label>
+					<input id="c3" name="colNote" type="number" min="0" value="2" style="width:110px" />
+				</div>
+				<div class="field">
+					<label for="hh">第一列是標題</label>
+					<label style="display:flex;align-items:center;gap:7px;height:39px;font-size:14px">
+						<input id="hh" name="hasHeader" type="checkbox" checked /> 是
+					</label>
+				</div>
+			</div>
+		</details>
 
 		<textarea
 			name="csv"
 			class="csv-in"
-			rows="8"
-			placeholder="訂單編號,金額,備註&#10;A20261011001,300,K7M2QX&#10;A20261011002,500,我的代碼 P4TR9N"
+			rows="6"
+			bind:value={csvText}
+			placeholder="選擇檔案後內容會出現在這裡；也可以直接貼上"
 		></textarea>
 
-		<button class="b b-quiet" style="flex:0;margin-top:12px" type="submit">預覽比對結果</button>
+		<button class="b b-quiet" style="flex:0;margin-top:12px" type="submit" disabled={!csvText.trim()}>
+			預覽比對結果
+		</button>
 	</form>
 </div>
 

@@ -28,8 +28,8 @@
 			<span class="path-tag">主線・九成的訂單走這裡</span>
 			<ol>
 				<li>觀眾登入網站，在「獲得狗狗幣」頁面看到自己的<b>訂單備註碼</b>（6 碼，例如 <code>K7M2QX</code>）</li>
-				<li>下單時把這組碼填進<b>訂單備註欄</b></li>
-				<li>你匯出訂單 CSV，貼進後台</li>
+				<li>結帳時把這組碼填進<b>「狗狗幣備註碼」那一題</b>（沒有這題就填訂單備註）</li>
+				<li>你從賣貨便匯出訂單、存成 CSV，上傳到後台</li>
 				<li>系統自動比對備註碼 → 找到帳號 → 一鍵發幣</li>
 			</ol>
 		</div>
@@ -60,12 +60,12 @@
 
 	<div class="say">
 		<span class="say-tag">可以直接複製去公告或商品說明的文案</span>
-		<pre>購買本次大賽周邊，可依訂單金額獲得狗狗幣參加賭盤。
+		<pre>購買本次大賽周邊，可依商品金額（不含運費）獲得狗狗幣參加賭盤。
 
 做法：
 1. 到活動網站用 Discord 登入
 2. 進入「獲得狗狗幣」頁面，複製你的 6 位訂單備註碼
-3. 下單時把這組碼貼進「訂單備註」欄位
+3. 結帳時把這組碼貼進「狗狗幣備註碼」欄位
 
 NT$1 = {fmt(data.rate)} 狗狗幣，對帳後統一發放。
 忘記填也沒關係，跟主辦方說一聲，我們會補一張兌換券給你。</pre>
@@ -82,31 +82,30 @@ NT$1 = {fmt(data.rate)} 狗狗幣，對帳後統一發放。
 </div>
 
 <!-- ── 主線操作 ────────────────────────────────────── -->
-<h2>三、主線：匯入訂單 CSV</h2>
+<h2>三、主線：匯入賣貨便訂單</h2>
 <div class="panel">
+	<div class="tip" style="margin:0 0 16px">
+		<span class="tip-title">開賣前先做一件事：在賣場加一個結帳問題</span>
+		<p>
+			到賣貨便賣場設定的「回饋資訊」，新增一題，題目名稱要含<b>「狗狗幣備註碼」</b>。
+			觀眾結帳時就會看到這一格，系統也會優先從這一題抓碼。
+			沒設的話，系統會退回去看「訂單備註」，但觀眾比較容易忘記填。
+		</p>
+	</div>
+
 	<ol class="steps">
 		<li>
-			<b>從平台匯出訂單</b><br />
-			賣貨便或綠界後台都可以匯出 CSV／Excel。需要的欄位只有三個：
-			<span class="need">訂單編號</span>
-			<span class="need">訂單金額</span>
-			<span class="need">買家備註</span>
+			<b>從賣貨便匯出訂單，存成 CSV</b><br />
+			賣貨便匯出的是 Excel 檔（.xlsx）。用 Excel 或 Google 試算表打開後「另存為 CSV」即可，
+			<u>不用刪任何欄位、不用調整格式</u>。
 		</li>
 		<li>
-			<b>貼進後台</b><br />
-			到<a href="/admin/coins">狗狗幣發放</a>，選來源平台，把 CSV 內容整段貼進文字框。
-			Excel 的話另存成 CSV 再用記事本打開複製即可。
-		</li>
-		<li>
-			<b>對好欄位位置</b><br />
-			「訂單編號欄／金額欄／備註欄」填的是<strong>第幾欄，從 0 開始數</strong>。
-			最左邊那欄是 0、第二欄是 1，以此類推。
-			若第一列是欄位名稱（訂單編號、金額…），把「第一列是標題」勾起來。
+			<b>到<a href="/admin/coins">狗狗幣發放</a>，選擇這個 CSV 檔</b><br />
+			系統會自動認出是賣貨便的格式，不需要設定欄位位置。
 		</li>
 		<li>
 			<b>按「預覽比對結果」</b><br />
 			<strong>這一步不會發任何幣。</strong>它只是把結果算給你看：誰拿多少、哪幾筆有問題。
-			看不順眼就改欄位號碼重按，按幾次都沒關係。
 		</li>
 		<li>
 			<b>確認金額總數，再按確認發放</b><br />
@@ -115,17 +114,39 @@ NT$1 = {fmt(data.rate)} 狗狗幣，對帳後統一發放。
 	</ol>
 
 	<div class="tip">
-		<span class="tip-title">同一份 CSV 匯入兩次會怎樣？</span>
+		<span class="tip-title">系統自動幫你擋掉的訂單</span>
+		<p>
+			<b>還沒付款</b>（包含「已送達」但買家還沒去取件的取貨付款訂單）、<b>已取消</b>、
+			<b>已被合併進其他訂單</b>的，這次都不會發。
+			買家付款後，<strong>下次匯出時整份重匯就好</strong> —— 已經發過的會自動略過，不會重複。
+		</p>
+	</div>
+
+	<div class="tip">
+		<span class="tip-title">狗狗幣怎麼算</span>
+		<p>
+			商品金額 × {fmt(data.rate)}，<b>不含運費</b>。賣貨便的「商品總額」欄其實含運費，系統會自動扣掉。
+			預覽表格的金額上停一下滑鼠，可以看到含運費的實付金額。
+		</p>
+	</div>
+
+	<div class="tip">
+		<span class="tip-title">同一份檔案匯入兩次會怎樣？</span>
 		<p>
 			<strong>不會重複發幣。</strong>訂單編號在資料庫裡是唯一的，
 			第二次匯入時那些訂單會顯示「已發放過」並自動跳過。
 			所以<b>不確定上次有沒有匯成功時，直接再匯一次是安全的</b>。
 		</p>
 	</div>
+
+	<p class="lede" style="margin:16px 0 0;font-size:14px">
+		不是賣貨便的檔案（例如綠界）時，展開「手動指定欄位」，自己填訂單編號、金額、備註在第幾欄（從 0 開始數）。
+		<strong>這種模式看不到付款狀態，要先自己把未付款的訂單刪掉再匯。</strong>
+	</p>
 </div>
 
 <!-- ── 問題列 ──────────────────────────────────────── -->
-<h2>四、預覽畫面上的五種狀態</h2>
+<h2>四、預覽畫面上的狀態</h2>
 <div class="panel">
 	<div class="scrollable">
 		<table>
@@ -135,23 +156,33 @@ NT$1 = {fmt(data.rate)} 狗狗幣，對帳後統一發放。
 			<tbody>
 				<tr>
 					<td><span class="st ready">可發放</span></td>
-					<td>備註碼對到了帳號</td>
+					<td>已付款，備註碼也對到了帳號</td>
 					<td>不用做什麼，按確認就會發</td>
 				</tr>
 				<tr>
 					<td><span class="st bad">沒填代碼</span></td>
-					<td>備註欄裡找不到 6 碼</td>
+					<td>已付款，但找不到 6 碼</td>
 					<td>走補救路徑：產生兌換券，用訂單留言發給他</td>
 				</tr>
 				<tr>
-					<td><span class="st bad">代碼查無此人</span></td>
+					<td><span class="st bad">查無此代碼</span></td>
 					<td>填了碼，但沒有這個帳號</td>
 					<td>多半是抄錯（<code>0</code> 與 <code>O</code> 已排除，但仍可能少一碼）。同樣走兌換券</td>
 				</tr>
 				<tr>
-					<td><span class="st bad">金額異常</span></td>
-					<td>金額欄不是正數</td>
-					<td>通常是欄位號碼填錯了。回上一步改欄位號碼重新預覽</td>
+					<td><span class="st bad">金額有問題</span></td>
+					<td>金額不是正數</td>
+					<td>賣貨便檔案不太會發生。手動欄位模式下多半是欄位號碼填錯</td>
+				</tr>
+				<tr>
+					<td><span class="st done">尚未付款</span></td>
+					<td>買家還沒付錢或還沒取件</td>
+					<td>不用理它，付款後下次重匯就會發</td>
+				</tr>
+				<tr>
+					<td><span class="st done">已取消／已併入其他訂單</span></td>
+					<td>這張訂單不會成立，或金額算在合併後的那張</td>
+					<td>不用理它</td>
 				</tr>
 				<tr>
 					<td><span class="st done">已發放過</span></td>
@@ -169,7 +200,7 @@ NT$1 = {fmt(data.rate)} 狗狗幣，對帳後統一發放。
 	<ol class="steps">
 		<li>
 			<b>算出面額</b><br />
-			訂單金額 × {fmt(data.rate)}。例如 NT$300 的訂單就開 <code>{fmt(300 * data.rate)}</code>。
+			商品金額（不含運費）× {fmt(data.rate)}。例如 NT$300 的商品就開 <code>{fmt(300 * data.rate)}</code>。
 		</li>
 		<li>
 			<b>產生券</b><br />

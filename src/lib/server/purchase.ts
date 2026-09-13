@@ -12,12 +12,24 @@ import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
 import { db } from './db';
 import { users, ledger, purchaseOrders, redeemCodes } from './db/schema';
 import { lockUser, writeLedger } from './ledger';
+import {
+	CODE_ALPHABET,
+	parseCsv,
+	extractCode,
+	detectFormat,
+	parseMyship,
+	parseByColumns,
+	type ParsedOrder,
+	type OrderFormat
+} from './order-formats';
+
+// 解析函式搬到 order-formats.ts（純函式、可不連資料庫測試），這裡照舊匯出，呼叫端不必改
+export { parseCsv, extractCode };
 
 /** 換算比例：NT$1 = 100 狗狗幣（企劃書明訂） */
 export const CHIPS_PER_TWD = 100;
 
-/** 排除 0/O/1/I/L —— 手寫或口述時最容易看錯的幾個。 */
-const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const ALPHABET = CODE_ALPHABET;
 
 function randomCode(len: number): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(len));
@@ -64,85 +76,32 @@ export async function backfillPublicCodes(): Promise<number> {
 }
 
 // ─────────────────────────────────────────────────────────
-// CSV
+// 訂單匯入
 // ─────────────────────────────────────────────────────────
-
-/**
- * 極簡 CSV 解析：支援雙引號包住的欄位、欄位內的逗號與換行、跳脫的雙引號。
- *
- * 刻意自己寫而不裝套件 —— 只有後台一個地方用得到，
- * 而且賣貨便與綠界匯出的格式都很單純。
- */
-export function parseCsv(text: string): string[][] {
-	const rows: string[][] = [];
-	let row: string[] = [];
-	let field = '';
-	let inQuotes = false;
-
-	// 去掉 Excel 匯出常見的 BOM
-	const src = text.replace(/^﻿/, '');
-
-	for (let i = 0; i < src.length; i++) {
-		const ch = src[i];
-
-		if (inQuotes) {
-			if (ch === '"') {
-				if (src[i + 1] === '"') {
-					field += '"';
-					i++;
-				} else {
-					inQuotes = false;
-				}
-			} else {
-				field += ch;
-			}
-			continue;
-		}
-
-		if (ch === '"') inQuotes = true;
-		else if (ch === ',') {
-			row.push(field);
-			field = '';
-		} else if (ch === '\n') {
-			row.push(field);
-			rows.push(row);
-			row = [];
-			field = '';
-		} else if (ch !== '\r') {
-			field += ch;
-		}
-	}
-
-	if (field !== '' || row.length) {
-		row.push(field);
-		rows.push(row);
-	}
-
-	return rows.filter((r) => r.some((c) => c.trim() !== ''));
-}
 
 export interface ImportRow {
 	orderRef: string;
+	/** 計幣金額 */
 	amountTwd: number;
+	/** 買家實付總額（賣貨便含運費），給操作員對照用 */
+	totalTwd: number;
 	rawCode: string;
 	/** 從備註裡抓出來、正規化過的代碼 */
 	code: string | null;
 	userId: string | null;
 	displayName: string | null;
 	chips: number;
-	status: 'ready' | 'no-code' | 'unknown-code' | 'already-credited' | 'bad-amount';
-}
-
-/**
- * 從備註欄抓出訂單備註碼。
- *
- * 買家不會乖乖只填代碼，實際會出現「代碼:K7M2QX」「我的ID K7M2QX 謝謝」
- * 這類寫法，所以抓連續 6 個合法字元就好。
- */
-export function extractCode(note: string): string | null {
-	const cleaned = note.toUpperCase().replace(/[^0-9A-Z]/g, ' ');
-	const m = cleaned.match(new RegExp(`\\b[${ALPHABET}]{6}\\b`));
-	return m ? m[0] : null;
+	/** 平台上的訂單狀態原文，例如「付款完成」 */
+	statusText: string;
+	status:
+		| 'ready'
+		| 'no-code'
+		| 'unknown-code'
+		| 'already-credited'
+		| 'bad-amount'
+		| 'not-paid'
+		| 'cancelled'
+		| 'merged';
 }
 
 /**
@@ -150,58 +109,95 @@ export function extractCode(note: string): string | null {
  *
  * 後台必須先讓操作員看到「誰會拿到多少、哪幾筆對不到」才動手，
  * 因為發幣之後要收回很麻煩。
+ *
+ * 查重複與對帳號各只打一次資料庫。原本是每張訂單查兩次，
+ * 一份一百多張的匯出檔在正式站就是兩百多次往返，會逼近函式逾時。
  */
+export async function previewOrders(platform: string, orders: ParsedOrder[]): Promise<ImportRow[]> {
+	const refs = [...new Set(orders.map((o) => o.orderRef))];
+	const codes = [...new Set(orders.map((o) => o.code).filter((c): c is string => !!c))];
+
+	const [credited, owners] = await Promise.all([
+		refs.length
+			? db
+					.select({ orderRef: purchaseOrders.orderRef })
+					.from(purchaseOrders)
+					.where(and(eq(purchaseOrders.platform, platform), inArray(purchaseOrders.orderRef, refs)))
+			: Promise.resolve([]),
+		codes.length
+			? db
+					.select({ id: users.id, displayName: users.displayName, publicCode: users.publicCode })
+					.from(users)
+					.where(inArray(users.publicCode, codes))
+			: Promise.resolve([])
+	]);
+
+	const creditedSet = new Set(credited.map((c) => c.orderRef));
+	const ownerOf = new Map(owners.map((u) => [u.publicCode, u]));
+
+	return orders.map((o) => {
+		const amountOk = Number.isFinite(o.amountTwd) && o.amountTwd > 0;
+		const owner = o.code ? ownerOf.get(o.code) : undefined;
+
+		// 順序有意義：已發過的一律先標出來，重匯同一份檔案時操作員才看得懂
+		let status: ImportRow['status'];
+		if (creditedSet.has(o.orderRef)) status = 'already-credited';
+		else if (o.block) status = o.block;
+		else if (!amountOk) status = 'bad-amount';
+		else if (!o.code) status = 'no-code';
+		else if (!owner) status = 'unknown-code';
+		else status = 'ready';
+
+		return {
+			orderRef: o.orderRef,
+			amountTwd: o.amountTwd,
+			totalTwd: o.totalTwd,
+			rawCode: o.rawCode,
+			code: o.code,
+			userId: status === 'ready' ? owner!.id : null,
+			displayName: owner?.displayName ?? null,
+			chips: amountOk ? o.amountTwd * CHIPS_PER_TWD : 0,
+			statusText: o.statusText,
+			status
+		};
+	});
+}
+
+/** 手動指定欄位的舊入口，自我測試仍在用。 */
 export async function previewImport(
 	platform: string,
 	rows: string[][],
 	cols: { orderRef: number; amount: number; note: number },
 	hasHeader: boolean
 ): Promise<ImportRow[]> {
-	const body = hasHeader ? rows.slice(1) : rows;
-	const out: ImportRow[] = [];
+	return previewOrders(platform, parseByColumns(rows, cols, hasHeader));
+}
 
-	for (const r of body) {
-		const orderRef = (r[cols.orderRef] ?? '').trim();
-		const amountRaw = (r[cols.amount] ?? '').replace(/[^0-9.-]/g, '');
-		const amountTwd = Math.floor(Number(amountRaw));
-		const rawCode = (r[cols.note] ?? '').trim();
+/**
+ * 後台匯入的入口：自動辨識格式。
+ *
+ * 認出是賣貨便時，平台名稱強制寫成「賣貨便」，不理會操作員選的下拉選單。
+ * 防重複是看「平台 + 訂單編號」—— 若同一份檔案一次選賣貨便、一次誤選綠界，
+ * 兩次會被當成不同訂單而重複發幣。
+ */
+export async function previewCsv(
+	selectedPlatform: string,
+	csv: string,
+	cols: { orderRef: number; amount: number; note: number },
+	hasHeader: boolean
+): Promise<{ format: OrderFormat; platform: string; rows: ImportRow[] }> {
+	const table = parseCsv(csv);
+	const format = detectFormat(table);
 
-		if (!orderRef) continue;
-
-		const code = extractCode(rawCode);
-		const chips = Number.isFinite(amountTwd) && amountTwd > 0 ? amountTwd * CHIPS_PER_TWD : 0;
-
-		let userId: string | null = null;
-		let displayName: string | null = null;
-		let status: ImportRow['status'];
-
-		const [dup] = await db
-			.select()
-			.from(purchaseOrders)
-			.where(and(eq(purchaseOrders.platform, platform), eq(purchaseOrders.orderRef, orderRef)))
-			.limit(1);
-
-		if (dup) {
-			status = 'already-credited';
-		} else if (!Number.isFinite(amountTwd) || amountTwd <= 0) {
-			status = 'bad-amount';
-		} else if (!code) {
-			status = 'no-code';
-		} else {
-			const [u] = await db.select().from(users).where(eq(users.publicCode, code)).limit(1);
-			if (u) {
-				userId = u.id;
-				displayName = u.displayName;
-				status = 'ready';
-			} else {
-				status = 'unknown-code';
-			}
-		}
-
-		out.push({ orderRef, amountTwd, rawCode, code, userId, displayName, chips, status });
+	if (format === 'myship') {
+		const platform = '賣貨便';
+		return { format, platform, rows: await previewOrders(platform, parseMyship(table)) };
 	}
-
-	return out;
+	return {
+		format,
+		platform: selectedPlatform,
+		rows: await previewOrders(selectedPlatform, parseByColumns(table, cols, hasHeader))
+	};
 }
 
 /** 把預覽中狀態為 ready 的那些真的發出去。 */

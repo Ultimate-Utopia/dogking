@@ -76,7 +76,7 @@
 	<p style="margin:0 0 14px"><a href="/">← 回賭盤</a></p>
 	<h1 style="font-size:24px;margin:0 0 6px">獲得狗狗幣</h1>
 	<p style="color:var(--muted);margin:0 0 24px">
-		購買本次大賽的合作周邊，即可依訂單金額等比例獲得狗狗幣。
+		購買本次大賽的合作周邊，即可依商品金額（不含運費）等比例獲得狗狗幣。
 	</p>
 
 	{#if form?.success}<div class="msg-ok">{form.success}</div>{/if}
@@ -86,7 +86,7 @@
 	<div class="card2" style="margin-bottom:16px">
 		<h2>你的訂單備註碼</h2>
 		<p style="margin:0 0 14px;color:var(--muted);font-size:14px">
-			下單時把這組碼填進<strong>訂單的備註欄</strong>，我們才知道要把狗狗幣發給誰。這就是它叫「訂單備註碼」的原因。
+			結帳時把這組碼填進<strong>「狗狗幣備註碼」</strong>那一格（沒有的話填訂單備註），我們才知道要把狗狗幣發給誰。
 		</p>
 
 		<div class="code-box">
@@ -115,7 +115,7 @@
 
 		<ol class="steps">
 			<li>到賣貨便或綠界商店下單購買周邊</li>
-			<li>在<strong>訂單備註</strong>填上你的訂單備註碼</li>
+			<li>結帳時在<strong>「狗狗幣備註碼」</strong>填上你的碼（沒有這格就填訂單備註）</li>
 			<li>主辦方核對訂單後發放，通常在對帳作業後統一處理</li>
 		</ol>
 	</div>

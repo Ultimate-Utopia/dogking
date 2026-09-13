@@ -2,8 +2,7 @@ import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { requireAdmin, logAdmin } from '$lib/server/admin';
 import {
-	parseCsv,
-	previewImport,
+	previewCsv,
 	commitImport,
 	createRedeemCodes,
 	backfillPublicCodes,
@@ -11,8 +10,7 @@ import {
 	codeStats,
 	unusedCodes,
 	PurchaseError,
-	CHIPS_PER_TWD,
-	type ImportRow
+	CHIPS_PER_TWD
 } from '$lib/server/purchase';
 
 export const load: PageServerLoad = async () => {
@@ -35,15 +33,25 @@ export const actions: Actions = {
 			note: Number(form.get('colNote') ?? 2)
 		};
 
-		if (!csv.trim()) return fail(400, { error: '請先貼上 CSV 內容' });
-
-		const rows = parseCsv(csv);
-		if (!rows.length) return fail(400, { error: 'CSV 看起來是空的' });
+		if (!csv.trim()) return fail(400, { error: '請先選擇匯出檔，或貼上 CSV 內容' });
 
 		try {
-			// 包成單一物件，前端只要檢查 form?.imported 就能安全取用全部欄位
-			const preview = await previewImport(platform, rows, cols, hasHeader);
-			return { imported: { preview, platform, csv, hasHeader, cols } };
+			const result = await previewCsv(platform, csv, cols, hasHeader);
+			if (!result.rows.length) {
+				return fail(400, { error: '檔案裡找不到任何訂單。若不是賣貨便的匯出檔，請確認欄位位置設定。' });
+			}
+			// 包成單一物件，前端只要檢查 form?.imported 就能安全取用全部欄位。
+			// platform 用辨識後的結果，不是下拉選單的值（見 previewCsv 的說明）
+			return {
+				imported: {
+					preview: result.rows,
+					format: result.format,
+					platform: result.platform,
+					csv,
+					hasHeader,
+					cols
+				}
+			};
 		} catch (e) {
 			return fail(400, { error: e instanceof Error ? e.message : '解析失敗' });
 		}
@@ -71,9 +79,10 @@ export const actions: Actions = {
 
 		if (!csv.trim()) return fail(400, { error: '資料遺失，請重新預覽' });
 
-		const rows: ImportRow[] = await previewImport(platform, parseCsv(csv), cols, hasHeader);
-		const result = await commitImport(platform, rows, admin.id);
-		await logAdmin(admin.id, '匯入訂單發幣', platform, result);
+		// 重新辨識一次；平台名稱以辨識結果為準，與預覽時一致
+		const again = await previewCsv(platform, csv, cols, hasHeader);
+		const result = await commitImport(again.platform, again.rows, admin.id);
+		await logAdmin(admin.id, '匯入訂單發幣', again.platform, { ...result, format: again.format });
 
 		return {
 			success:
