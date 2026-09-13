@@ -2,6 +2,7 @@
 	import '../../app.css';
 	import '../board.css';
 	import './coins.css';
+	import IdCard from '$lib/components/IdCard.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -61,9 +62,12 @@
 	<div class="topbar-in">
 		<a class="brand" href="/">終焉狗王大賽</a>
 		<div class="purse">
-			<span class="who">{data.user.displayName}</span>
-			<span class="coins">{fmt(data.balance)}</span>
-			<span class="who">狗狗幣</span>
+			<IdCard
+				displayName={data.user.displayName}
+				avatarUrl={data.user.avatarUrl}
+				balance={data.balance}
+				publicCode={data.user.publicCode}
+			/>
 		</div>
 	</div>
 </div>

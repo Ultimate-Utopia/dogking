@@ -187,59 +187,93 @@ export interface BracketNode {
 	winnerSide: string | null;
 	/** 這一場有沒有正在開放的盤口，前台用來標「可下注」 */
 	hasOpenMarket: boolean;
-	/** 畫在第幾欄。由晉級關係推得，見 assignColumns。 */
+	/** 畫在第幾欄＝輪次。見 layoutBracket。 */
 	col: number;
+	/** 在自己那一排裡的垂直位置，單位是「一格場次的高度」，可以是 0.5 這種半格。 */
+	y: number;
 	winnerTo: { matchNo: number; slot: string } | null;
-	loserTo: { matchNo: number; slot: string } | null;
+	/** 空位要顯示什麼：「M2 勝者」「M1 敗者」，或 null 代表種子位（待定） */
+	blueFrom: { matchNo: number; kind: 'win' | 'lose' } | null;
+	redFrom: { matchNo: number; kind: 'win' | 'lose' } | null;
 }
 
 export interface BracketView {
 	nodes: BracketNode[];
-	/** 場次欄位數（不含冠軍那一欄） */
-	cols: number;
-	championCol: number;
+	/** 總決賽所在欄；冠軍在它右邊一欄 */
+	finalCol: number;
+	/** 勝部與敗部各自佔幾格高（決定兩排的高度） */
+	laneRows: { winners: number; losers: number };
 	champion: { name: string; doro: string | null } | null;
-	/** 敗部冠軍贏下總決賽，還差一場加賽才能定冠軍。 */
-	pendingReset: boolean;
 }
 
+type MatchRow = typeof matches.$inferSelect;
+
 /**
- * 每一場該站在第幾欄 —— 取「從第一輪走到這一場的最長路徑」。
+ * 樹狀圖的版面：每一場的欄位與垂直位置。
  *
- * 不能直接拿輪次當欄位：雙敗淘汰裡勝部與敗部的輪次不同步，
- * 敗部第二輪要等勝部四強打完才能打，拿輪次畫會讓箭頭往回指。
- * 取最長路徑則保證每條連線都是從左往右。
+ * 欄位＝輪次（決賽排在最後），和主辦方賽程圖的排法一致，
+ * 觀眾拿兩張圖對照時場次位置才對得上。
  *
- * 依場次編號遞增處理即可 —— 晉級一定指向更大的編號，
- * 這點由 scripts/verify-bracket.mjs 守著。
+ * 垂直位置照一般賽程表的做法：
+ *   ・場次最多的那一欄當基準，由上而下一格一格排
+ *   ・右邊的場次放在「送人進來的那幾場」的正中間（M9 夾在 M2、M3 之間）
+ *   ・左邊的場次放在它要去的那一格旁邊，送藍方就偏上半格、送紅方就偏下半格
+ *     （M1 送進 M2 藍方，所以 M1 比 M2 高半格）
+ *
+ * 只看同一排內的勝者線。敗者從勝部掉到敗部是跨排的，
+ * 樹狀圖上不畫線，改在空位上寫「M1 敗者」—— 也是賽程圖本身的標法。
  */
-function assignColumns(rows: (typeof matches.$inferSelect)[]): Map<number, number> {
-	const preds = new Map<number, number[]>();
-	const push = (to: number | null, from: number) => {
-		if (to === null) return;
-		const list = preds.get(to);
-		if (list) list.push(from);
-		else preds.set(to, [from]);
+function layoutLane(lane: MatchRow[]): Map<number, number> {
+	const y = new Map<number, number>();
+	if (!lane.length) return y;
+
+	const byCol = new Map<number, MatchRow[]>();
+	for (const m of [...lane].sort((a, b) => a.orderNo - b.orderNo)) {
+		const list = byCol.get(m.roundNo);
+		if (list) list.push(m);
+		else byCol.set(m.roundNo, [m]);
+	}
+	const cols = [...byCol.keys()].sort((a, b) => a - b);
+	const anchor = cols.reduce((best, c) => (byCol.get(c)!.length > byCol.get(best)!.length ? c : best));
+	const inLane = new Set(lane.map((m) => m.orderNo));
+
+	/** 同一欄裡不能疊在一起：比上一場近於一格就往下推 */
+	const place = (col: MatchRow[], want: (m: MatchRow, prev: number | null) => number) => {
+		let prev: number | null = null;
+		for (const m of col) {
+			let v = want(m, prev);
+			if (prev !== null && v < prev + 1) v = prev + 1;
+			y.set(m.orderNo, v);
+			prev = v;
+		}
 	};
 
-	for (const m of rows) {
-		push(m.winnerToMatchNo, m.orderNo);
-		push(m.loserToMatchNo, m.orderNo);
+	place(byCol.get(anchor)!, (_m, prev) => (prev === null ? 0 : prev + 1));
+
+	for (const c of cols.filter((c) => c > anchor)) {
+		place(byCol.get(c)!, (m, prev) => {
+			const feeders = lane.filter((f) => f.winnerToMatchNo === m.orderNo && y.has(f.orderNo));
+			if (!feeders.length) return prev === null ? 0 : prev + 1;
+			return feeders.reduce((s, f) => s + y.get(f.orderNo)!, 0) / feeders.length;
+		});
 	}
 
-	const col = new Map<number, number>();
-	for (const m of [...rows].sort((a, b) => a.orderNo - b.orderNo)) {
-		const from = preds.get(m.orderNo) ?? [];
-		col.set(m.orderNo, from.length ? Math.max(...from.map((p) => (col.get(p) ?? 0) + 1)) : 0);
+	for (const c of cols.filter((c) => c < anchor).reverse()) {
+		place(byCol.get(c)!, (m, prev) => {
+			const target = m.winnerToMatchNo;
+			if (target === null || !inLane.has(target) || !y.has(target)) return prev === null ? 0 : prev + 1;
+			return y.get(target)! + (m.winnerToSlot === 'blue' ? -0.5 : 0.5);
+		});
 	}
-	return col;
+
+	// 往左推的時候可能出現負值，整排平移回從 0 開始
+	const min = Math.min(...y.values());
+	for (const [k, v] of y) y.set(k, v - min);
+	return y;
 }
 
 /**
- * 賽程樹。回傳所有場次、它們的欄位與晉級去向，前台依這份資料畫線。
- *
- * 加賽（final R2）只有在真的觸發時才回傳 —— 沒發生的話畫出來會讓觀眾誤會
- * 一定會打到那一場。判斷方式是雙方至少有一邊已被指派。
+ * 賽程樹。回傳所有場次、版面位置、空位的來源，前台照著畫。
  */
 export async function getBracket(): Promise<BracketView> {
 	const [allMatches, allPeople, allMarkets] = await Promise.all([
@@ -248,20 +282,28 @@ export async function getBracket(): Promise<BracketView> {
 		db.select().from(markets)
 	]);
 
-	const shown = allMatches.filter((m) => {
-		if (m.bracket === 'final' && m.roundNo === 2) {
-			return m.blueParticipantId !== null || m.redParticipantId !== null;
-		}
-		return true;
-	});
+	const winners = allMatches.filter((m) => m.bracket === 'winners');
+	const losers = allMatches.filter((m) => m.bracket === 'losers');
+	const yOf = new Map([...layoutLane(winners), ...layoutLane(losers)]);
 
-	const col = assignColumns(shown);
-	const nameOf = (id: number | null) =>
+	const lastRound = Math.max(0, ...winners.map((m) => m.roundNo), ...losers.map((m) => m.roundNo));
+	const colOf = (m: MatchRow) => (m.bracket === 'final' ? lastRound + m.roundNo - 1 : m.roundNo - 1);
+
+	/** 誰把人送進 (場次, 那一側)。沒人送就是種子位。 */
+	const fromOf = (matchNo: number, slot: string): BracketNode['blueFrom'] => {
+		for (const m of allMatches) {
+			if (m.winnerToMatchNo === matchNo && m.winnerToSlot === slot) return { matchNo: m.orderNo, kind: 'win' };
+			if (m.loserToMatchNo === matchNo && m.loserToSlot === slot) return { matchNo: m.orderNo, kind: 'lose' };
+		}
+		return null;
+	};
+
+	const personOf = (id: number | null) =>
 		id === null ? null : (allPeople.find((p) => p.id === id) ?? null);
 
-	const nodes: BracketNode[] = shown.map((m) => {
-		const blue = nameOf(m.blueParticipantId);
-		const red = nameOf(m.redParticipantId);
+	const nodes: BracketNode[] = allMatches.map((m) => {
+		const blue = personOf(m.blueParticipantId);
+		const red = personOf(m.redParticipantId);
 		return {
 			orderNo: m.orderNo,
 			roundLabel: m.roundLabel,
@@ -277,56 +319,44 @@ export async function getBracket(): Promise<BracketView> {
 			scoreRed: m.scoreRed,
 			winnerSide: m.winnerSide,
 			hasOpenMarket: allMarkets.some((mk) => mk.matchId === m.id && mk.state === 'open'),
-			col: col.get(m.orderNo) ?? 0,
+			col: colOf(m),
+			y: yOf.get(m.orderNo) ?? 0,
 			winnerTo:
 				m.winnerToMatchNo !== null && m.winnerToSlot
 					? { matchNo: m.winnerToMatchNo, slot: m.winnerToSlot }
 					: null,
-			loserTo:
-				m.loserToMatchNo !== null && m.loserToSlot
-					? { matchNo: m.loserToMatchNo, slot: m.loserToSlot }
-					: null
+			blueFrom: fromOf(m.orderNo, 'blue'),
+			redFrom: fromOf(m.orderNo, 'red')
 		};
 	});
 
-	const cols = nodes.length ? Math.max(...nodes.map((n) => n.col)) + 1 : 0;
+	const rowsOf = (lane: string) => {
+		const ys = nodes.filter((n) => n.bracket === lane).map((n) => n.y);
+		return ys.length ? Math.max(...ys) + 1 : 0;
+	};
 
 	/**
-	 * 冠軍。
+	 * 冠軍＝最後一場決賽的勝者。
 	 *
-	 * 不能看到總決賽有勝方就直接定冠軍 —— 雙敗淘汰裡，
-	 * 勝部冠軍還沒輸過，敗部冠軍已經輸一場。敗部冠軍贏下總決賽只是
-	 * 把兩人拉到同一條起跑線，必須再加賽一場。
-	 *
-	 * 判斷方式不寫死「紅方來自敗部」，而是回頭看晉級關係：
-	 * 勝方那一格是由哪一場送上來的？若來自敗部，就還差一場加賽。
-	 * 這樣賽程重新排過也不用改這段。
+	 * 主辦方的賽程沒有「敗部冠軍贏了總決賽要再加賽」，總決賽打完就定冠軍。
+	 * 若日後改成有加賽，這裡要改成回頭看勝方是不是從敗部上來的。
 	 */
 	const finals = nodes.filter((n) => n.bracket === 'final').sort((a, b) => b.orderNo - a.orderNo);
 	const last = finals[0] ?? null;
-
-	/** 送進 (場次, 那一側) 的來源場次 */
-	const feederOf = (matchNo: number, slot: string) =>
-		nodes.find(
-			(n) =>
-				(n.winnerTo?.matchNo === matchNo && n.winnerTo.slot === slot) ||
-				(n.loserTo?.matchNo === matchNo && n.loserTo.slot === slot)
-		) ?? null;
-
-	const pendingReset =
-		last && last.winnerSide
-			? feederOf(last.orderNo, last.winnerSide)?.bracket === 'losers'
-			: false;
-
 	const champion =
-		last && last.winnerSide && !pendingReset
+		last && last.winnerSide
 			? {
 					name: (last.winnerSide === 'blue' ? last.blueName : last.redName) ?? '',
 					doro: (last.winnerSide === 'blue' ? last.blueDoro : last.redDoro) ?? null
 				}
 			: null;
 
-	return { nodes, cols, championCol: cols, champion, pendingReset };
+	return {
+		nodes,
+		finalCol: last ? last.col : lastRound,
+		laneRows: { winners: rowsOf('winners'), losers: rowsOf('losers') },
+		champion
+	};
 }
 
 /** 賽況資訊區用：參賽者與主持群，含立繪與頻道連結。 */

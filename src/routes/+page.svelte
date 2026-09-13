@@ -5,6 +5,8 @@
 	import './board.css';
 	import './bracket.css';
 	import Bracket from '$lib/components/Bracket.svelte';
+	import IdCard from '$lib/components/IdCard.svelte';
+	import PrizeCard from '$lib/components/PrizeCard.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -33,7 +35,12 @@
 	 * 個人資訊（見 +page.server.ts 的說明）。代價是登入狀態會晚一步出現。
 	 */
 	interface Me {
-		user: { displayName: string; avatarUrl: string | null; isAdmin: boolean } | null;
+		user: {
+			displayName: string;
+			avatarUrl: string | null;
+			publicCode: string | null;
+			isAdmin: boolean;
+		} | null;
 		balance: number;
 		bets: Array<{
 			id: number;
@@ -293,9 +300,12 @@
 			<div class="purse"><span class="skeleton"></span></div>
 		{:else if user}
 			<div class="purse">
-				<span class="who">{user.displayName}</span>
-				<span class="coins">{fmt(balance)}</span>
-				<span class="who">狗狗幣</span>
+				<IdCard
+					displayName={user.displayName}
+					avatarUrl={user.avatarUrl}
+					{balance}
+					publicCode={user.publicCode}
+				/>
 				<a href="/coins">獲得狗狗幣</a>
 				{#if user.isAdmin}<a href="/admin">後台</a>{/if}
 				<form method="POST" action="/auth/logout" style="display:inline">
@@ -547,13 +557,18 @@
 		<Bracket {bracket} />
 	</div>
 
+	<!-- ── 排行榜獎品（主辦方 2026-09-13 新增）────────── -->
+	<div style="margin-bottom:16px">
+		<PrizeCard />
+	</div>
+
 	<!-- ── 排行榜與個人紀錄 ──────────────────────────── -->
 	<div class="cols">
 		<div class="card2">
 			<h2>籌碼排行榜 TOP 5</h2>
 			{#each leaderboard as r (r.rank)}
-				<div class="rank-row">
-					<span class="r">{r.rank}</span>
+				<div class="rank-row" class:prized={r.rank <= 3}>
+					<span class="r">{r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
 					<span>{r.displayName}</span>
 					<span class="v">{fmt(r.balance)}</span>
 				</div>

@@ -118,12 +118,12 @@ export const participants = pgTable('participants', {
 });
 
 // ─────────────────────────────────────────────────────────
-// matches —— 場次 1～13（含條件觸發的加賽）
+// matches —— 場次 M1～M16（9 人雙敗淘汰，見 src/lib/data/roster.js）
 // ─────────────────────────────────────────────────────────
 export const matches = pgTable('matches', {
 	id: serial('id').primaryKey(),
 
-	/** 場次編號 1～13。加賽為 13，賽程未觸發時不建立。 */
+	/** 場次編號，對應主辦方賽程圖上的 M1～M16。晉級關係以它為準而不是 id。 */
 	orderNo: integer('order_no').notNull(),
 	/** 例：勝部第一輪 / 敗部第二輪 / 總決賽 */
 	roundLabel: text('round_label').notNull(),
@@ -133,7 +133,7 @@ export const matches = pgTable('matches', {
 	isElimination: boolean('is_elimination').notNull().default(false),
 
 	/**
-	 * 賽程樹的位置：winners（勝部）/ losers（敗部）/ final（總決賽與加賽）。
+	 * 賽程樹的位置：winners（勝部）/ losers（敗部）/ final（總決賽）。
 	 * 與 roundNo 一起決定樹狀圖上的欄位。
 	 */
 	bracket: text('bracket').notNull().default('winners'),

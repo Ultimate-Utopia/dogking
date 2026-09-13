@@ -25,6 +25,8 @@ export const GET: RequestHandler = async ({ locals, setHeaders }) => {
 		user: {
 			displayName: locals.user.displayName,
 			avatarUrl: locals.user.avatarUrl,
+			// 導覽列的身分卡要顯示。只能放在這支 no-store 的端點，不能進首頁的 SSR
+			publicCode: locals.user.publicCode,
 			isAdmin: locals.user.isAdmin
 		},
 		balance,

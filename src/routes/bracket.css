@@ -11,14 +11,9 @@
 	-webkit-overflow-scrolling: touch;
 }
 
-.bracket-grid {
+.bracket-canvas {
 	position: relative;
-	display: grid;
-	grid-template-columns: repeat(var(--cols), 172px);
-	gap: 18px 26px;
-	align-items: start;
-	min-width: min-content;
-	padding: 2px 0 4px;
+	margin: 4px 0;
 }
 
 /* ── 連線 ─────────────────────────────────────────
@@ -33,42 +28,44 @@
 .ln {
 	fill: none;
 	stroke-width: 1.5;
-}
-.ln.win {
-	stroke: color-mix(in srgb, var(--blue) 55%, transparent);
-}
-/* 敗者的去向用虛線，跟晉級線區分開來 —— 它們常常交錯在一起 */
-.ln.lose {
-	stroke: color-mix(in srgb, var(--red) 42%, transparent);
-	stroke-dasharray: 4 4;
+	stroke: color-mix(in srgb, var(--muted) 70%, transparent);
 }
 .ln.champ {
 	stroke: var(--ok);
 	stroke-width: 2;
 }
 
-/* ── 一格（同排同欄）───────────────────────────── */
-.cell {
-	position: relative;
+/* 勝部與敗部的分隔線，賽程圖上也有這條 */
+.divider {
+	position: absolute;
+	left: 0;
+	height: 0;
+	border-top: 1px dashed var(--line);
+}
+.lane-tag {
+	position: absolute;
+	left: 0;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	padding: 1px 7px;
+	border-radius: 4px;
+	white-space: nowrap;
 	z-index: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	min-width: 0;
 }
-.cell.w {
-	grid-row: 1;
+.lane-tag.w {
+	color: var(--blue);
+	background: color-mix(in srgb, var(--blue) 10%, var(--surface));
 }
-.cell.l {
-	grid-row: 2;
-}
-/* 決賽與冠軍跨兩排並置中，視覺上就在勝部與敗部中間 */
-.cell.f {
-	grid-row: 1 / span 2;
-	align-self: center;
+.lane-tag.l {
+	color: var(--red);
+	background: color-mix(in srgb, var(--red) 10%, var(--surface));
 }
 
-.cell-head {
+/* ── 欄位標題 ─────────────────────────────────── */
+.col-head {
+	position: absolute;
+	box-sizing: border-box;
 	font-family: var(--mono);
 	font-size: 10.5px;
 	letter-spacing: 0.1em;
@@ -76,10 +73,14 @@
 	white-space: nowrap;
 	padding-bottom: 3px;
 	border-bottom: 1px solid var(--line);
+	z-index: 1;
 }
 
 /* ── 一場比賽 ─────────────────────────────────── */
 .node {
+	position: absolute;
+	z-index: 1;
+	box-sizing: border-box;
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	background: var(--surface);
@@ -150,6 +151,7 @@
 }
 .slot .tbd {
 	color: var(--muted);
+	font-size: 12.5px;
 }
 
 .slot .pip {
@@ -168,6 +170,9 @@
 
 /* ── 冠軍 ─────────────────────────────────────── */
 .champ {
+	position: absolute;
+	z-index: 1;
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	gap: 9px;
@@ -220,25 +225,4 @@
 	color: var(--muted);
 	margin: 12px 0 0;
 	line-height: 1.9;
-}
-.bracket-hint .key {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	margin-right: 14px;
-	white-space: nowrap;
-}
-.bracket-hint .s {
-	display: inline-block;
-	width: 18px;
-	height: 0;
-	border-top-width: 2px;
-}
-.bracket-hint .s.win {
-	border-top-style: solid;
-	border-top-color: color-mix(in srgb, var(--blue) 55%, transparent);
-}
-.bracket-hint .s.lose {
-	border-top-style: dashed;
-	border-top-color: color-mix(in srgb, var(--red) 42%, transparent);
 }

@@ -38,6 +38,8 @@
 	align-items: center;
 	gap: 14px;
 	font-size: 14px;
+	flex-wrap: wrap;
+	min-width: 0;
 }
 .purse .coins {
 	font-family: var(--mono);
@@ -588,6 +590,13 @@
 	font-family: var(--mono);
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
+}
+/* 前三名會拿到獎品（見 PrizeCard），在榜上要看得出來 */
+.rank-row.prized {
+	font-weight: 700;
+}
+.rank-row.prized .r {
+	font-size: 17px;
 }
 
 .bet-row {
