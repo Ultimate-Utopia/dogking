@@ -557,10 +557,14 @@
 		<Bracket {bracket} />
 	</div>
 
-	<!-- ── 排行榜獎品（主辦方 2026-09-13 新增）────────── -->
-	<div style="margin-bottom:16px">
-		<PrizeCard />
-	</div>
+	<!-- ── 排行榜獎品（後台 /admin/prizes 編輯）────────── -->
+	{#if data.prizes.length}
+		<div class="prize-list">
+			{#each data.prizes as prize (prize.id)}
+				<PrizeCard {prize} />
+			{/each}
+		</div>
+	{/if}
 
 	<!-- ── 排行榜與個人紀錄 ──────────────────────────── -->
 	<div class="cols">

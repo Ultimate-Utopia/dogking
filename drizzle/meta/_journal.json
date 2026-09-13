@@ -50,6 +50,13 @@
       "when": 1788119738623,
       "tag": "0006_bracket_advancement",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789321497319,
+      "tag": "0007_prizes",
+      "breakpoints": true
     }
   ]
 }

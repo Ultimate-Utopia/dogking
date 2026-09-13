@@ -1,18 +1,20 @@
 <script lang="ts">
 	/**
-	 * 排行榜獎品示意。
+	 * 排行榜獎品示意。內容由後台「獎品設定」編輯（/admin/prizes）。
 	 *
-	 * 企劃書說排行榜「只是優越感」，但主辦方後來加了實體獎品 ——
 	 * 這是推動觀眾買周邊換狗狗幣的主要誘因，所以放在排行榜正上方。
-	 * 內容來自 src/lib/data/prizes.js。
 	 */
-	import { TOP_HOLDER_PRIZE as prize } from '$lib/data/prizes.js';
+	let {
+		prize
+	}: {
+		prize: { name: string; ranksLabel: string; features: string[]; imageUrl: string | null };
+	} = $props();
 </script>
 
 <div class="prize">
 	<div class="prize-media">
-		{#if prize.image}
-			<img src={prize.image} alt="{prize.name}示意圖" loading="lazy" />
+		{#if prize.imageUrl}
+			<img src={prize.imageUrl} alt="{prize.name}示意圖" loading="lazy" />
 		{:else}
 			<div class="prize-placeholder" aria-hidden="true">
 				<span class="gem">💎</span>
@@ -22,13 +24,15 @@
 	</div>
 
 	<div class="prize-body">
-		<span class="prize-ranks">🏆 {prize.ranks}獎勵</span>
+		<span class="prize-ranks">🏆 {prize.ranksLabel}獎勵</span>
 		<h3 class="prize-name">{prize.name}</h3>
-		<ul class="prize-features">
-			{#each prize.features as f (f)}
-				<li>{f}</li>
-			{/each}
-		</ul>
+		{#if prize.features.length}
+			<ul class="prize-features">
+				{#each prize.features as f, i (i)}
+					<li>{f}</li>
+				{/each}
+			</ul>
+		{/if}
 	</div>
 </div>
 

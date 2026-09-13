@@ -17,7 +17,8 @@ import {
 	bigserial,
 	serial,
 	index,
-	uniqueIndex
+	uniqueIndex,
+	customType
 } from 'drizzle-orm/pg-core';
 
 /** 陣營。藍方 / 紅方，對應前台看板左右兩側。 */
@@ -344,3 +345,35 @@ export const adminLogs = pgTable(
 	},
 	(t) => [index('admin_logs_admin_user_id_idx').on(t.adminUserId)]
 );
+
+// ─────────────────────────────────────────────────────────
+// prizes —— 排行榜獎品，後台可編輯。
+//
+// 圖片直接存在資料庫（bytea），不另外接雲端儲存：
+// 獎品只有幾張、瀏覽器端先縮到 800px 以內，每張約一兩百 KB。
+// Netlify 的函式沒有可寫入的硬碟，為了這幾張圖另接一套儲存服務，
+// 交接時多一個要管的東西，不划算。
+// 前台讀圖走 /prizes/image/[id]?v=版本，CDN 長期快取，資料庫幾乎不會被打到。
+// ─────────────────────────────────────────────────────────
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+	dataType: () => 'bytea'
+});
+
+export const prizes = pgTable('prizes', {
+	id: serial('id').primaryKey(),
+	/** 顯示順序，小的在前 */
+	sortOrder: integer('sort_order').notNull().default(0),
+	/** 適用名次的說明，例如「持有狗狗幣前三名」「第 1 名」 */
+	ranksLabel: text('ranks_label').notNull(),
+	name: text('name').notNull(),
+	/** 特色，一項一個標籤 */
+	features: jsonb('features').$type<string[]>().notNull().default([]),
+
+	/** ⚠️ 列表查詢不要 select 這欄，只有讀圖的端點需要 */
+	imageData: bytea('image_data'),
+	imageType: text('image_type'),
+	/** 圖片內容的雜湊前幾碼。放進圖片網址，換圖後網址就變，CDN 快取不會卡住舊圖 */
+	imageVersion: text('image_version'),
+
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});

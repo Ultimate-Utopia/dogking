@@ -697,3 +697,11 @@ a.member:hover {
 	color: var(--muted);
 	line-height: 1.9;
 }
+
+/* 排行榜獎品：可能不只一項（例如第 1 名與第 2～3 名不同），直向排列 */
+.prize-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-bottom: 16px;
+}
