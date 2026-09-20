@@ -30,6 +30,31 @@ export interface BoardMarket {
 	winnerSide: string | null;
 }
 
+/**
+ * 前台「所有場次」列表的一列。
+ *
+ * 這次的玩法是所有場次一開場就開放下注，連還沒確定對手的場次也能押，
+ * 所以每一列都要能自己交代「你押的是誰」—— 對手未定時顯示晉級來源（M1 勝者）。
+ */
+export interface BoardBar {
+	matchId: number;
+	orderNo: number;
+	roundLabel: string;
+	format: string;
+	matchState: string;
+	/** 場次的勝方，已比完才有 */
+	matchWinnerSide: string | null;
+	blueName: string | null;
+	redName: string | null;
+	blueDoro: string | null;
+	redDoro: string | null;
+	/** 對手未定時的說明文字，例如「M1 勝者」；種子位為 null */
+	blueFrom: string | null;
+	redFrom: string | null;
+	/** 整場盤。還沒開盤時為 null。 */
+	market: BoardMarket | null;
+}
+
 export interface BoardMatch {
 	id: number;
 	orderNo: number;
@@ -45,6 +70,22 @@ export interface BoardMatch {
 	scoreRed: number;
 	state: string;
 	winnerSide: string | null;
+}
+
+/**
+ * 誰把人送進 (場次, 那一側)。沒人送就是種子位。
+ * 賽程樹與場次列表都要用：還沒確定對手時要顯示「M1 勝者」而不是一片空白。
+ */
+function feederOf(all: (typeof matches.$inferSelect)[], matchNo: number, slot: string) {
+	for (const m of all) {
+		if (m.winnerToMatchNo === matchNo && m.winnerToSlot === slot) {
+			return { matchNo: m.orderNo, kind: 'win' as const };
+		}
+		if (m.loserToMatchNo === matchNo && m.loserToSlot === slot) {
+			return { matchNo: m.orderNo, kind: 'lose' as const };
+		}
+	}
+	return null;
 }
 
 function marketLabel(gameNo: number) {
@@ -100,7 +141,14 @@ export async function getBoardState() {
 	]);
 
 	if (!allMatches.length) {
-		return { now: new Date().toISOString(), current: null, markets: [], previous: null, next: null };
+		return {
+			now: new Date().toISOString(),
+			current: null,
+			markets: [],
+			bars: [],
+			previous: null,
+			next: null
+		};
 	}
 
 	// 當前場次：優先有開放中的盤口，其次待結算，再其次下一個未完成的
@@ -133,6 +181,53 @@ export async function getBoardState() {
 			};
 		});
 
+	/** 所有場次的整場盤，給前台的提前下注列表 */
+	const bars: BoardBar[] = allMatches
+		.filter((m) => m.state !== 'void')
+		.map((m) => {
+			const blue = allPeople.find((p) => p.id === m.blueParticipantId) ?? null;
+			const red = allPeople.find((p) => p.id === m.redParticipantId) ?? null;
+			const mk = allMarkets.find((x) => x.matchId === m.id && x.gameNo === 0) ?? null;
+			const from = (slot: 'blue' | 'red') => {
+				const f = feederOf(allMatches, m.orderNo, slot);
+				return f ? `M${f.matchNo} ${f.kind === 'win' ? '勝者' : '敗者'}` : null;
+			};
+
+			let market: BoardMarket | null = null;
+			if (mk) {
+				const odds = calcOdds(mk.poolBlue, mk.poolRed);
+				market = {
+					id: mk.id,
+					gameNo: mk.gameNo,
+					label: marketLabel(mk.gameNo),
+					state: mk.state,
+					poolBlue: mk.poolBlue,
+					poolRed: mk.poolRed,
+					total: odds.total,
+					oddsBlue: odds.blue,
+					oddsRed: odds.red,
+					lockAt: mk.lockAt ? mk.lockAt.toISOString() : null,
+					winnerSide: mk.winnerSide
+				};
+			}
+
+			return {
+				matchId: m.id,
+				orderNo: m.orderNo,
+				roundLabel: m.roundLabel,
+				format: m.format,
+				matchState: m.state,
+				matchWinnerSide: m.winnerSide,
+				blueName: blue?.name ?? null,
+				redName: red?.name ?? null,
+				blueDoro: blue?.doroSlug ?? null,
+				redDoro: red?.doroSlug ?? null,
+				blueFrom: from('blue'),
+				redFrom: from('red'),
+				market
+			};
+		});
+
 	const prevRow = [...allMatches]
 		.reverse()
 		.find((m) => m.orderNo < current.orderNo && m.state === 'done');
@@ -143,6 +238,7 @@ export async function getBoardState() {
 		now: new Date().toISOString(),
 		current: toBoardMatch(current, allPeople),
 		markets: boardMarkets,
+		bars,
 		previous: prevRow ? toBoardMatch(prevRow, allPeople) : null,
 		next: nextRow ? toBoardMatch(nextRow, allPeople) : null
 	};

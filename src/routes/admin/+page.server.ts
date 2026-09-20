@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { listMatches, createMatch } from '$lib/server/tournament';
+import { listMatches, createMatch, openAllMatchMarkets } from '$lib/server/tournament';
 import { recentAdminLogs, requireAdmin, logAdmin } from '$lib/server/admin';
 
 export const load: PageServerLoad = async () => {
@@ -9,6 +9,21 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
+	/**
+	 * 一次開放所有場次的整場盤。活動開始前按一次即可。
+	 * 已經封盤或已結算的場次不會被重新打開（見 openAllMatchMarkets）。
+	 */
+	openAll: async ({ locals }) => {
+		const admin = requireAdmin(locals.user);
+		const result = await openAllMatchMarkets();
+		await logAdmin(admin.id, '一鍵開放全部場次', `新開 ${result.created} 場`, result);
+
+		const parts = [`新開放 ${result.created} 場`];
+		if (result.alreadyOpen) parts.push(`原本就開著 ${result.alreadyOpen} 場`);
+		if (result.skipped.length) parts.push(`未處理 ${result.skipped.length} 場：${result.skipped.join('、')}`);
+		return { success: parts.join('，') };
+	},
+
 	createMatch: async ({ request, locals }) => {
 		const admin = requireAdmin(locals.user);
 		const form = await request.formData();

@@ -89,9 +89,54 @@
 
 	const openMarkets = $derived(board.markets.filter(isOpen));
 
+	/**
+	 * 畫面上所有可操作的盤口：上方當前場次的各局盤，加上下方「所有場次」的整場盤。
+	 * 同一個盤口可能同時出現在兩邊（當前場次的整場盤），find 取到的是同一筆，無妨。
+	 */
+	const pageMarkets = $derived.by(() => {
+		const out = [...board.markets];
+		for (const b of board.bars) if (b.market) out.push(b.market);
+		return out;
+	});
+
 	const activeMarket = $derived(
-		board.markets.find((m) => m.id === pickedMarket) ?? openMarkets[0] ?? null
+		pageMarkets.find((m) => m.id === pickedMarket) ?? openMarkets[0] ?? null
 	);
+
+	/**
+	 * 正在操作的盤口屬於哪一場、雙方是誰。
+	 *
+	 * 確認視窗要寫出「你押的是誰」，但下方列表的盤口不屬於當前場次，
+	 * 名字不能再從 board.current 拿。對手未定時退而顯示晉級來源（M1 勝者）。
+	 */
+	const activeTarget = $derived.by(() => {
+		if (!activeMarket) return null;
+
+		const bar = board.bars.find((b) => b.market?.id === activeMarket.id);
+		if (bar) {
+			return {
+				title: `M${bar.orderNo}・${bar.roundLabel}`,
+				blueName: bar.blueName ?? bar.blueFrom ?? '藍方',
+				redName: bar.redName ?? bar.redFrom ?? '紅方'
+			};
+		}
+		if (board.current) {
+			return {
+				title: `第 ${board.current.orderNo} 場・${activeMarket.label}`,
+				blueName: board.current.blueName ?? '藍方',
+				redName: board.current.redName ?? '紅方'
+			};
+		}
+		return null;
+	});
+
+	/** 展開下注面板的那一列（場次 id）。一次只展開一列，版面才不會爆開。 */
+	let openBar = $state<number | null>(null);
+
+	/** 這一列現在能不能下注 */
+	function barOpen(bar: (typeof board.bars)[number]) {
+		return !!bar.market && isOpen(bar.market);
+	}
 
 	/** 封盤剩餘秒數，以伺服器時鐘計算。 */
 	function remaining(lockAt: string | null): number | null {
@@ -266,6 +311,7 @@
 	$effect(() => {
 		if (form?.success) {
 			confirming = false;
+			openBar = null;
 			stake = 0;
 			pickedSide = null;
 			newKey();
@@ -557,6 +603,147 @@
 		<Bracket {bracket} />
 	</div>
 
+	<!-- ── 所有場次：提前下注 ──────────────────────── -->
+	{#if board.bars.length}
+		<div class="card2" style="margin-bottom:16px">
+			<h2>所有場次・提前下注</h2>
+			<p class="bars-note">
+				每一場都可以提前押，<strong>連還沒確定對手的場次也可以</strong> ——
+				押的是那一側，例如「M1 勝者」。主持人會在每場開打前約一分鐘收盤，收盤後就不能再下注。
+			</p>
+
+			{#each board.bars as bar (bar.matchId)}
+				{@const mk = bar.market}
+				{@const canPick = barOpen(bar)}
+				{@const left = mk ? remaining(mk.lockAt) : null}
+				{@const expanded = openBar === bar.matchId && canPick}
+				<div class="bar" class:bar-open={canPick} class:bar-done={bar.matchState === 'done'}>
+					<div class="bar-head">
+						<span class="bar-no">M{bar.orderNo}</span>
+						<span class="bar-fmt">{bar.format}</span>
+						<span class="bar-round">{bar.roundLabel}</span>
+						{#if canPick && left !== null}
+							<span class="cd">{mmss(left)}</span>
+						{:else if canPick}
+							<span class="tag t-open">開放下注</span>
+						{:else if mk?.state === 'settled'}
+							<span class="tag t-settled">已派彩</span>
+						{:else if mk}
+							<span class="tag t-locked">已封盤</span>
+						{:else}
+							<span class="tag t-pending">尚未開盤</span>
+						{/if}
+					</div>
+
+					<div class="bar-vs">
+						<span class="bar-name b" class:win={bar.matchWinnerSide === 'blue'}>
+							{#if bar.blueDoro}<img src="/participants/{bar.blueDoro}-sm.webp" alt="" width="22" height="22" />{/if}
+							{bar.blueName ?? bar.blueFrom ?? '待定'}
+						</span>
+						<span class="bar-x">VS</span>
+						<span class="bar-name r" class:win={bar.matchWinnerSide === 'red'}>
+							{#if bar.redDoro}<img src="/participants/{bar.redDoro}-sm.webp" alt="" width="22" height="22" />{/if}
+							{bar.redName ?? bar.redFrom ?? '待定'}
+						</span>
+					</div>
+
+					{#if mk}
+						<div class="split">
+							{#if mk.total === 0}
+								<div class="none">尚無人下注</div>
+							{:else}
+								{#if mk.poolBlue > 0}<div class="sb" style="flex:{mk.poolBlue}">{fmt(mk.poolBlue)}</div>{/if}
+								{#if mk.poolRed > 0}<div class="sr" style="flex:{mk.poolRed}">{fmt(mk.poolRed)}</div>{/if}
+							{/if}
+						</div>
+						<div class="split-legend">
+							<span>{mk.total > 0 ? Math.round((mk.poolBlue / mk.total) * 100) : 0}%</span>
+							<span>總彩池 {fmt(mk.total)}</span>
+							<span>{mk.total > 0 ? Math.round((mk.poolRed / mk.total) * 100) : 0}%</span>
+						</div>
+					{/if}
+
+					{#if user && mk}
+						{@const mine = myPositions(mk.id)}
+						{#if mine.length}
+							<div class="bar-mine">
+								你已押
+								{#each mine as p, i (p.side)}
+									{i > 0 ? '、' : ''}<span class={p.side}>
+										{(p.side === 'blue' ? bar.blueName ?? bar.blueFrom : bar.redName ?? bar.redFrom) ??
+											(p.side === 'blue' ? '藍方' : '紅方')}
+										{fmt(p.amount)}
+									</span>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+
+					{#if canPick}
+						{#if meLoaded && !user}
+							<a class="bar-bet" href="/auth/login" data-sveltekit-reload>登入後下注</a>
+						{:else}
+							<button
+								class="bar-bet"
+								onclick={() => {
+									openBar = expanded ? null : bar.matchId;
+									if (!expanded) pickedMarket = mk!.id;
+								}}
+							>
+								{expanded ? '收合' : '下注'}
+							</button>
+						{/if}
+					{/if}
+
+					{#if expanded && mk}
+						{@const isActive = activeMarket?.id === mk.id}
+						<div class="bar-bet-panel">
+							<div class="sides">
+								<button
+									class="side-btn b {isActive && pickedSide === 'blue' ? 'on' : ''}"
+									onclick={() => pick(mk.id, 'blue')}
+								>
+									支持 {bar.blueName ?? bar.blueFrom ?? '藍方'}
+								</button>
+								<button
+									class="side-btn r {isActive && pickedSide === 'red' ? 'on' : ''}"
+									onclick={() => pick(mk.id, 'red')}
+								>
+									支持 {bar.redName ?? bar.redFrom ?? '紅方'}
+								</button>
+							</div>
+
+							{#if isActive && pickedSide}
+								<div class="chips">
+									{#each CHIPS as v (v)}
+										<button class="chip-btn" disabled={stake + v > balance} onclick={() => addChip(v)}>
+											+{v >= 1000 ? `${v / 1000}K` : v}
+										</button>
+									{/each}
+									<button class="chip-btn" disabled={balance <= 0} onclick={() => (stake = balance)}>
+										All-in
+									</button>
+									<button class="chip-btn clear" onclick={() => (stake = 0)}>清除</button>
+								</div>
+
+								<div class="stake">
+									<span class="n">{fmt(stake)}</span>
+									<span class="est">
+										{#if stake > 0}預估獲得 {fmt(estimate)}{:else}請選擇金額{/if}
+									</span>
+								</div>
+
+								<button class="submit" disabled={!canBet} onclick={() => (confirming = true)}>
+									送出下注
+								</button>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
+
 	<!-- ── 排行榜獎品（後台 /admin/prizes 編輯）────────── -->
 	{#if data.prizes.length}
 		<div class="prize-list">
@@ -670,8 +857,8 @@
 </div>
 
 <!-- ── 二次確認彈窗 ──────────────────────────────────── -->
-{#if confirming && activeMarket && pickedSide && board.current}
-	{@const nm = pickedSide === 'blue' ? board.current.blueName : board.current.redName}
+{#if confirming && activeMarket && activeTarget && pickedSide}
+	{@const nm = pickedSide === 'blue' ? activeTarget.blueName : activeTarget.redName}
 	<div class="backdrop">
 		<!-- 點背景關閉。用 button 而非在 div 上掛 onclick，鍵盤才能操作 -->
 		<button class="backdrop-close" aria-label="關閉下注確認" onclick={() => (confirming = false)}
@@ -679,10 +866,12 @@
 		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" tabindex="-1">
 			<h3 id="confirm-title">確認下注</h3>
 			<dl>
+				<dt>場次</dt>
+				<dd>{activeTarget.title}</dd>
 				<dt>盤口</dt>
 				<dd>{activeMarket.label}</dd>
 				<dt>押注</dt>
-				<dd style="color:{pickedSide === 'blue' ? 'var(--blue)' : 'var(--red)'}">{nm ?? (pickedSide === 'blue' ? '藍方' : '紅方')}</dd>
+				<dd style="color:{pickedSide === 'blue' ? 'var(--blue)' : 'var(--red)'}">{nm}</dd>
 				<dt>金額</dt>
 				<dd>{fmt(stake)}</dd>
 				<dt>預估獲得</dt>

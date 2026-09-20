@@ -97,6 +97,52 @@ export async function openMarket(matchId: number, gameNo = 0) {
 	return created;
 }
 
+/**
+ * 一次開放所有場次的整場盤。
+ *
+ * 這次的玩法是「開場就全部開放下注，主持人在每場開打前一分鐘手動收盤」，
+ * 所以活動開始前要把十幾個盤口一口氣開起來，不可能一場一場點。
+ *
+ * 刻意只碰「還沒有盤口」的場次：
+ *   ・已經 locked 的不會被重新打開 —— 那是主持人剛剛親手收的盤
+ *   ・已結算或已取消的不動
+ *   ・已經是 open 的就算已開放，不重設 lockAt（免得把排好的倒數清掉）
+ */
+export async function openAllMatchMarkets() {
+	const allMatches = await db.select().from(matches).orderBy(asc(matches.orderNo));
+	const existing = await db.select().from(markets).where(eq(markets.gameNo, 0));
+
+	let created = 0;
+	let alreadyOpen = 0;
+	const skipped: string[] = [];
+
+	for (const m of allMatches) {
+		if (m.state === 'done' || m.state === 'void') {
+			skipped.push(`M${m.orderNo}（場次已結束）`);
+			continue;
+		}
+
+		const market = existing.find((mk) => mk.matchId === m.id);
+		if (!market) {
+			await db.insert(markets).values({
+				matchId: m.id,
+				type: 'match',
+				gameNo: 0,
+				state: 'open',
+				openedAt: new Date()
+			});
+			created++;
+			continue;
+		}
+
+		if (market.state === 'open') alreadyOpen++;
+		else if (market.state === 'locked') skipped.push(`M${m.orderNo}（已封盤）`);
+		else skipped.push(`M${m.orderNo}（已結算或取消）`);
+	}
+
+	return { created, alreadyOpen, skipped };
+}
+
 /** 立即封盤。 */
 export async function lockMarket(marketId: number) {
 	const [updated] = await db

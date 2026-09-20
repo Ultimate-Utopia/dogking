@@ -705,3 +705,150 @@ a.member:hover {
 	gap: 12px;
 	margin-bottom: 16px;
 }
+
+/* ── 所有場次・提前下注 ─────────────────────────────
+   這次的玩法是全部場次一開場就開放，主持人逐場手動收盤，
+   所以列表要能一眼看出「哪幾場還能押、押了多少、還剩多久」。 */
+
+.bars-note {
+	margin: 0 0 14px;
+	font-size: 13.5px;
+	color: var(--muted);
+	line-height: 1.8;
+}
+
+.bar {
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	padding: 11px 13px;
+	margin-bottom: 10px;
+	background: var(--paper);
+}
+.bar:last-child {
+	margin-bottom: 0;
+}
+/* 還能下注的場次要跳出來，觀眾多半是來找「現在能押什麼」 */
+.bar.bar-open {
+	background: var(--surface);
+	border-color: var(--blue);
+}
+.bar.bar-done {
+	opacity: 0.6;
+}
+
+.bar-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+	font-size: 12.5px;
+	color: var(--muted);
+}
+.bar-no {
+	font-family: var(--mono);
+	font-size: 14px;
+	font-weight: 800;
+	color: var(--ink);
+}
+.bar-fmt {
+	font-family: var(--mono);
+	font-size: 11px;
+	padding: 1px 6px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+}
+.bar-round {
+	flex: 1;
+	min-width: 0;
+}
+.bar-head .cd {
+	font-size: 15px;
+}
+
+.bar-vs {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 9px;
+	font-size: 14.5px;
+}
+.bar-name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+.bar-name.r {
+	justify-content: flex-end;
+	text-align: right;
+}
+.bar-name.b {
+	color: var(--blue);
+}
+.bar-name.r {
+	color: var(--red);
+}
+/* 已分出勝負的那一方加底線，掃一眼就知道誰贏了 */
+.bar-name.win {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.bar-name img {
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	flex: none;
+	background: var(--paper);
+}
+.bar-x {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--muted);
+	flex: none;
+}
+
+.bar-mine {
+	margin-top: 8px;
+	font-size: 12.5px;
+	color: var(--muted);
+}
+.bar-mine .blue {
+	color: var(--blue);
+	font-weight: 700;
+}
+.bar-mine .red {
+	color: var(--red);
+	font-weight: 700;
+}
+
+.bar-bet {
+	display: block;
+	width: 100%;
+	margin-top: 10px;
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	text-align: center;
+	text-decoration: none;
+	padding: 9px 14px;
+	border-radius: 7px;
+	border: 1px solid var(--blue);
+	background: transparent;
+	color: var(--blue);
+	cursor: pointer;
+}
+.bar-bet:hover {
+	background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+
+.bar-bet-panel {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+}
