@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -14,12 +15,24 @@
 		'already-credited': { label: '已發放過', cls: 't-settled' },
 		'bad-amount': { label: '金額有問題', cls: 't-void' },
 		'not-paid': { label: '尚未付款', cls: 't-settled' },
+		'voucher-issued': { label: '已開兌換券', cls: 't-locked' },
+		'voucher-used': { label: '券已兌換', cls: 't-settled' },
 		cancelled: { label: '已取消', cls: 't-settled' },
 		merged: { label: '已併入其他訂單', cls: 't-settled' }
 	};
 
 	/** 這幾種是平台上的狀態造成的，不是操作員要處理的問題，等付款後重匯即可 */
-	const WAITING = new Set(['not-paid', 'cancelled', 'merged', 'already-credited']);
+	const WAITING = new Set([
+		'not-paid',
+		'cancelled',
+		'merged',
+		'already-credited',
+		'voucher-issued',
+		'voucher-used'
+	]);
+
+	/** 需要開券的：已付款、但代碼對不到帳號 */
+	const NEEDS_VOUCHER = new Set(['no-code', 'unknown-code']);
 
 	let csvText = $state('');
 	let fileName = $state('');
@@ -50,6 +63,7 @@
 	}
 
 	const ctx = $derived(form && 'imported' in form ? form.imported : null);
+	const issued = $derived(ctx?.issued ?? null);
 	const preview = $derived(ctx?.preview ?? null);
 	const readyRows = $derived(preview?.filter((r) => r.status === 'ready') ?? []);
 	const readyChips = $derived(readyRows.reduce((a, r) => a + r.chips, 0));
@@ -68,6 +82,18 @@
 
 {#if form?.error}<div class="err">{form.error}</div>{/if}
 {#if form?.success}<div class="ok-msg">{form.success}</div>{/if}
+{#if issued}
+	<div class="panel" style="border-color:var(--ok)">
+		<h2 style="margin:0 0 8px">
+			{issued.reused ? '這張訂單先前已經開過券' : '已為訂單開出兌換券'}
+		</h2>
+		<p class="hint" style="margin:0 0 10px">
+			訂單 <code>{issued.orderRef}</code>　面額 <b>{fmt(issued.amount)}</b> 狗狗幣。
+			請用該平台的<strong>訂單留言</strong>把券碼發給買家，不要貼在公開的地方。
+		</p>
+		<textarea class="codes-out" readonly rows="1">{issued.code}</textarea>
+	</div>
+{/if}
 
 <!-- ── 產生出來的兌換券 ──────────────────────────────── -->
 {#if form && 'codes' in form && form.codes}
@@ -110,6 +136,7 @@
 						<th>對應帳號</th>
 						<th style="text-align:right">狗狗幣</th>
 						<th>狀態</th>
+						<th>處理</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -124,6 +151,30 @@
 							<td>{r.displayName ?? '—'}</td>
 							<td class="n">{r.status === 'ready' ? fmt(r.chips) : '—'}</td>
 							<td><span class="tag {STATUS[r.status]?.cls}">{STATUS[r.status]?.label}</span></td>
+							<td>
+								{#if NEEDS_VOUCHER.has(r.status)}
+									<form method="POST" action="?/issueCode" use:enhance>
+										<input type="hidden" name="orderRef" value={r.orderRef} />
+										<input type="hidden" name="amountTwd" value={r.amountTwd} />
+										<input type="hidden" name="platform" value={ctx?.platform ?? ''} />
+										<input type="hidden" name="csv" value={ctx?.csv ?? ''} />
+										{#if ctx?.hasHeader}<input type="hidden" name="hasHeader" value="on" />{/if}
+										<input type="hidden" name="colOrderRef" value={ctx?.cols.orderRef ?? 0} />
+										<input type="hidden" name="colAmount" value={ctx?.cols.amount ?? 1} />
+										<input type="hidden" name="colNote" value={ctx?.cols.note ?? 2} />
+										<button class="b b-quiet" style="flex:0;padding:5px 10px;font-size:12.5px" type="submit">
+											開兌換券
+										</button>
+									</form>
+								{:else if r.voucher}
+									<span class="voucher-cell">
+										<code>{r.voucher.code}</code>
+										{r.voucher.used ? '已兌換' : '未兌換'}
+									</span>
+								{:else}
+									—
+								{/if}
+							</td>
 						</tr>
 					{/each}
 				</tbody>

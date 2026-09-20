@@ -26,7 +26,7 @@ export interface ParsedOrder {
 	statusText: string;
 }
 
-export type OrderFormat = 'myship' | 'columns';
+export type OrderFormat = 'myship' | 'ecpay' | 'columns';
 
 // ─────────────────────────────────────────────────────────
 // CSV
@@ -134,7 +134,9 @@ function findMyshipHeader(rows: string[][]): number {
 }
 
 export function detectFormat(rows: string[][]): OrderFormat {
-	return findMyshipHeader(rows) >= 0 ? 'myship' : 'columns';
+	if (findMyshipHeader(rows) >= 0) return 'myship';
+	if (findEcpayHeader(rows) >= 0) return 'ecpay';
+	return 'columns';
 }
 
 /**
@@ -222,6 +224,85 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
 			block: myshipBlock(status, r[cPay] ?? ''),
 			// 「付款完成⏎(12/25 20:31)」只留第一行
 			statusText: status.split('\n')[0].trim()
+		});
+	}
+
+	return out;
+}
+
+// ─────────────────────────────────────────────────────────
+// 綠界
+// ─────────────────────────────────────────────────────────
+
+/**
+ * 綠界「贊助 / 收款」匯出檔的特徵：
+ *
+ *   ・第 1 列就是標題，一張訂單一列（不像賣貨便會拆成多列）
+ *   ・代碼填在「贊助者留言」，那是結帳時給觀眾打字的欄位
+ *   ・有「付款狀態」欄（已付款 / 未付款 / 退款…），金額欄是「交易金額」
+ *
+ * ⚠️ 這份檔案含姓名、手機、電子信箱、地址等個資欄位。
+ * 解析時刻意只讀訂單編號、金額、付款狀態與留言 —— 其他欄位連碰都不碰，
+ * 也不會寫進資料庫或後台操作紀錄。
+ */
+const ECPAY_REQUIRED = ['訂單編號', '交易金額', '付款狀態'];
+
+function findEcpayHeader(rows: string[][]): number {
+	for (let i = 0; i < Math.min(rows.length, 6); i++) {
+		const cells = rows[i].map(norm);
+		if (ECPAY_REQUIRED.every((h) => cells.includes(h))) return i;
+	}
+	return -1;
+}
+
+/**
+ * 付款狀態 → 能不能發幣。
+ * 綠界的狀態是中文字串，退款與失敗都當成不發，其餘非「已付款」一律視為尚未付款。
+ */
+function ecpayBlock(status: string): OrderBlock {
+	if (/退款|取消|失敗/.test(status)) return 'cancelled';
+	if (status.includes('已付款')) return null;
+	return 'not-paid';
+}
+
+export function parseEcpay(rows: string[][]): ParsedOrder[] {
+	const h = findEcpayHeader(rows);
+	if (h < 0) return [];
+
+	const header = rows[h].map(norm);
+	const col = (name: string) => header.indexOf(name);
+
+	const cRef = col('訂單編號');
+	const cAmount = col('交易金額');
+	const cStatus = col('付款狀態');
+	// 代碼優先看贊助者留言（觀眾自己打的），沒有才看廠商備註（我們自己註記的）
+	const cNote = col('贊助者留言');
+	const cShopNote = col('廠商備註');
+
+	const out: ParsedOrder[] = [];
+
+	for (const r of rows.slice(h + 1)) {
+		const orderRef = (r[cRef] ?? '').trim();
+		if (!orderRef) continue;
+
+		const amountTwd = money(r[cAmount]);
+		let rawCode = cNote >= 0 ? (r[cNote] ?? '').trim() : '';
+		// 綠界空欄位會匯出成「-」
+		if (rawCode === '-') rawCode = '';
+		if (!rawCode && cShopNote >= 0) {
+			const shop = (r[cShopNote] ?? '').trim();
+			if (shop !== '-') rawCode = shop;
+		}
+
+		const status = (r[cStatus] ?? '').trim();
+		out.push({
+			orderRef,
+			amountTwd,
+			totalTwd: amountTwd,
+			rawCode,
+			code: rawCode ? extractCode(rawCode) : null,
+			block: ecpayBlock(status),
+			statusText: status
 		});
 	}
 

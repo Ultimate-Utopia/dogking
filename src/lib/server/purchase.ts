@@ -18,6 +18,7 @@ import {
 	extractCode,
 	detectFormat,
 	parseMyship,
+	parseEcpay,
 	parseByColumns,
 	type ParsedOrder,
 	type OrderFormat
@@ -93,6 +94,15 @@ export interface ImportRow {
 	chips: number;
 	/** 平台上的訂單狀態原文，例如「付款完成」 */
 	statusText: string;
+	/**
+	 * 這張訂單開過的兌換券。
+	 *
+	 * 匯出檔永遠只是「平台上的訂單」，不會知道我們私下開過券、
+	 * 觀眾兌換了沒。每次重匯都會再看到同一批沒填代碼的訂單，
+	 * 操作員光看檔案分不出哪些已經處理過 —— 所以這個狀態由我們自己的
+	 * redeem_codes.order_ref 補上。
+	 */
+	voucher: { code: string; used: boolean; usedAt: string | null } | null;
 	status:
 		| 'ready'
 		| 'no-code'
@@ -101,7 +111,9 @@ export interface ImportRow {
 		| 'bad-amount'
 		| 'not-paid'
 		| 'cancelled'
-		| 'merged';
+		| 'merged'
+		| 'voucher-issued'
+		| 'voucher-used';
 }
 
 /**
@@ -113,35 +125,74 @@ export interface ImportRow {
  * 查重複與對帳號各只打一次資料庫。原本是每張訂單查兩次，
  * 一份一百多張的匯出檔在正式站就是兩百多次往返，會逼近函式逾時。
  */
-export async function previewOrders(platform: string, orders: ParsedOrder[]): Promise<ImportRow[]> {
+export async function previewOrders(
+	platform: string,
+	orders: ParsedOrder[],
+	tx: Executor = db
+): Promise<ImportRow[]> {
 	const refs = [...new Set(orders.map((o) => o.orderRef))];
 	const codes = [...new Set(orders.map((o) => o.code).filter((c): c is string => !!c))];
 
-	const [credited, owners] = await Promise.all([
+	const [credited, owners, vouchers] = await Promise.all([
 		refs.length
-			? db
+			? tx
 					.select({ orderRef: purchaseOrders.orderRef })
 					.from(purchaseOrders)
 					.where(and(eq(purchaseOrders.platform, platform), inArray(purchaseOrders.orderRef, refs)))
 			: Promise.resolve([]),
 		codes.length
-			? db
+			? tx
 					.select({ id: users.id, displayName: users.displayName, publicCode: users.publicCode })
 					.from(users)
 					.where(inArray(users.publicCode, codes))
+			: Promise.resolve([]),
+		refs.length
+			? tx
+					.select({
+						code: redeemCodes.code,
+						orderRef: redeemCodes.orderRef,
+						usedByUserId: redeemCodes.usedByUserId,
+						usedAt: redeemCodes.usedAt
+					})
+					.from(redeemCodes)
+					.where(inArray(redeemCodes.orderRef, refs))
 			: Promise.resolve([])
 	]);
 
 	const creditedSet = new Set(credited.map((c) => c.orderRef));
 	const ownerOf = new Map(owners.map((u) => [u.publicCode, u]));
 
+	// 同一張訂單若開過多張券，以「已被兌換的那張」為準 —— 那代表這筆已經發出去了
+	const voucherOf = new Map<string, ImportRow['voucher']>();
+	for (const v of vouchers) {
+		if (!v.orderRef) continue;
+		const used = v.usedByUserId !== null;
+		const prev = voucherOf.get(v.orderRef);
+		if (!prev || (used && !prev.used)) {
+			voucherOf.set(v.orderRef, {
+				code: v.code,
+				used,
+				usedAt: v.usedAt ? v.usedAt.toISOString() : null
+			});
+		}
+	}
+
 	return orders.map((o) => {
 		const amountOk = Number.isFinite(o.amountTwd) && o.amountTwd > 0;
 		const owner = o.code ? ownerOf.get(o.code) : undefined;
 
-		// 順序有意義：已發過的一律先標出來，重匯同一份檔案時操作員才看得懂
+		const voucher = voucherOf.get(o.orderRef) ?? null;
+
+		/**
+		 * 順序有意義：已發過的一律先標出來，重匯同一份檔案時操作員才看得懂。
+		 *
+		 * ⚠️ 兌換券的判斷一定要排在 ready 前面。否則同一張訂單先開了券，
+		 * 觀眾後來又把代碼補填進平台的留言欄，這裡就會再自動發一次 —— 變成雙倍。
+		 */
 		let status: ImportRow['status'];
 		if (creditedSet.has(o.orderRef)) status = 'already-credited';
+		else if (voucher?.used) status = 'voucher-used';
+		else if (voucher) status = 'voucher-issued';
 		else if (o.block) status = o.block;
 		else if (!amountOk) status = 'bad-amount';
 		else if (!o.code) status = 'no-code';
@@ -158,6 +209,7 @@ export async function previewOrders(platform: string, orders: ParsedOrder[]): Pr
 			displayName: owner?.displayName ?? null,
 			chips: amountOk ? o.amountTwd * CHIPS_PER_TWD : 0,
 			statusText: o.statusText,
+			voucher,
 			status
 		};
 	});
@@ -192,6 +244,10 @@ export async function previewCsv(
 	if (format === 'myship') {
 		const platform = '賣貨便';
 		return { format, platform, rows: await previewOrders(platform, parseMyship(table)) };
+	}
+	if (format === 'ecpay') {
+		const platform = '綠界';
+		return { format, platform, rows: await previewOrders(platform, parseEcpay(table)) };
 	}
 	return {
 		format,
@@ -263,6 +319,37 @@ export async function createRedeemCodes(count: number, amount: number, orderRef?
 		created.push(code);
 	}
 	return created;
+}
+
+/**
+ * 為某一張訂單開兌換券，給「已付款但沒填代碼」的買家。
+ *
+ * 同一張訂單刻意不重複開券：
+ *   ・已經開過但還沒被兌換 → 直接把原來那張回傳給操作員（多半是券碼弄丟了）
+ *   ・已經被兌換 → 拒絕。再開一張就是同一筆訂單發兩次幣
+ *
+ * orderRef 一定會寫進券裡，下次重匯同一份檔案時，那一列就會顯示「已開兌換券」。
+ */
+export async function issueVoucherForOrder(orderRef: string, amountTwd: number, tx: Executor = db) {
+	const ref = orderRef.trim();
+	if (!ref) throw new PurchaseError('缺少訂單編號');
+	if (!Number.isInteger(amountTwd) || amountTwd <= 0) {
+		throw new PurchaseError('這張訂單的金額無法判斷，請改用下方「產生兌換券」手動開券');
+	}
+
+	const existing = await tx.select().from(redeemCodes).where(eq(redeemCodes.orderRef, ref));
+	const used = existing.find((c) => c.usedByUserId !== null);
+	if (used) {
+		throw new PurchaseError(`這張訂單的兌換券已經被兌換過了（${used.code}），不會再開一張`);
+	}
+
+	const unused = existing.find((c) => c.usedByUserId === null);
+	if (unused) return { code: unused.code, amount: unused.amount, reused: true };
+
+	const amount = amountTwd * CHIPS_PER_TWD;
+	const code = `${randomCode(4)}-${randomCode(4)}-${randomCode(4)}`;
+	await tx.insert(redeemCodes).values({ code, amount, orderRef: ref });
+	return { code, amount, reused: false };
 }
 
 /** 兌換。已使用或不存在都回同一種錯誤訊息，避免被拿來猜碼。 */

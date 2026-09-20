@@ -4,6 +4,7 @@ import { requireAdmin, logAdmin } from '$lib/server/admin';
 import {
 	previewCsv,
 	commitImport,
+	issueVoucherForOrder,
 	createRedeemCodes,
 	backfillPublicCodes,
 	recentOrders,
@@ -49,7 +50,9 @@ export const actions: Actions = {
 					platform: result.platform,
 					csv,
 					hasHeader,
-					cols
+					cols,
+					// 與 issueCode 的回傳形狀保持一致，前端才不用處理兩種形狀
+					issued: null as { orderRef: string; code: string; amount: number; reused: boolean } | null
 				}
 			};
 		} catch (e) {
@@ -89,6 +92,56 @@ export const actions: Actions = {
 				`已發放 ${result.credited} 筆，共 ${result.chips.toLocaleString('zh-TW')} 狗狗幣` +
 				(result.skipped ? `（略過重複 ${result.skipped} 筆）` : '')
 		};
+	},
+
+	/**
+	 * 針對預覽表格裡某一張訂單開兌換券，開完回到同一份預覽。
+	 *
+	 * 刻意把 csv 一起帶回來重新比對：開完券之後那一列就會變成「已開兌換券」，
+	 * 操作員馬上看得到結果，下次重匯同一份檔案也一樣看得到。
+	 */
+	issueCode: async ({ request, locals }) => {
+		const admin = requireAdmin(locals.user);
+		const form = await request.formData();
+
+		const orderRef = String(form.get('orderRef') ?? '');
+		const amountTwd = Number(form.get('amountTwd') ?? 0);
+		const platform = String(form.get('platform') ?? '');
+		const csv = String(form.get('csv') ?? '');
+		const hasHeader = form.get('hasHeader') === 'on';
+		const cols = {
+			orderRef: Number(form.get('colOrderRef') ?? 0),
+			amount: Number(form.get('colAmount') ?? 1),
+			note: Number(form.get('colNote') ?? 2)
+		};
+
+		try {
+			const voucher = await issueVoucherForOrder(orderRef, amountTwd);
+			if (!voucher.reused) {
+				await logAdmin(admin.id, '為訂單開兌換券', orderRef, { amount: voucher.amount });
+			}
+
+			const result = await previewCsv(platform, csv, cols, hasHeader);
+			return {
+				imported: {
+					preview: result.rows,
+					format: result.format,
+					platform: result.platform,
+					csv,
+					hasHeader,
+					cols,
+					issued: {
+						orderRef,
+						code: voucher.code,
+						amount: voucher.amount,
+						reused: voucher.reused
+					}
+				}
+			};
+		} catch (e) {
+			if (e instanceof PurchaseError) return fail(400, { error: e.message });
+			return fail(400, { error: '開券失敗，請再試一次' });
+		}
 	},
 
 	makeCodes: async ({ request, locals }) => {

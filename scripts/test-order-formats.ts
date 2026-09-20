@@ -14,6 +14,7 @@ import {
 	extractCode,
 	detectFormat,
 	parseMyship,
+	parseEcpay,
 	parseByColumns
 } from '../src/lib/server/order-formats.ts';
 
@@ -134,6 +135,52 @@ t('沒有專屬問題時退回訂單備註', () => assert.equal(by('CM0000000000
 t('暱稱欄位裡長得像備註碼的字不會被抓走', () => assert.equal(by('CM0000000000007').code, null));
 t('狀態只留第一行', () => assert.equal(by('CM0000000000005').statusText, '已合併'));
 
+console.log('綠界格式');
+
+// 依真實綠界匯出檔的欄位結構捏造，個資欄位一律留白
+const ECPAY_HEADER = '訂單日期,訂單編號,商品名稱,贊助者留言,付款人,付款方式,交易金額,付款狀態,付款時間,撥款狀態,撥款時間,信用卡授權單號 / 卡號末 4 碼,代碼 / ATM 繳款帳號,開立類型,開立方式,發票號碼,姓名,發票類型,手機號碼,電子信箱,手機載具編號,自然人憑證載具編號,地址,捐贈碼,廠商備註';
+/** 含逗號的欄位要加引號，否則那一列的欄位會整個位移（這是 CSV 本來的規則） */
+const eq = (v: string) => (v.includes(',') ? `"${v.replace(/"/g, '""')}"` : v);
+const ecpayRow = (ref: string, note: string, amount: string, status: string, shopNote = '-') =>
+	[
+		'2026/09/12 22:58:24', ref, '實況主贊助 https://example.com/x', note, '-', '信用卡',
+		amount, status, '2026/09/12 22:59:44', '未撥款', '-', '- / 0107', '-', '-', '-', '-',
+		'-', '-', '-', '-', '-', '-', '-', '-', shopNote
+	]
+		.map(eq)
+		.join(',');
+
+const ecpayCsv = [
+	ECPAY_HEADER,
+	ecpayRow('20260912225824138', 'JDDTN4', '10', '已付款'),
+	ecpayRow('20260912225824139', '幫我加油 代碼 P4TR9N 謝謝', '1,200', '已付款'),
+	ecpayRow('20260912225824140', '-', '300', '已付款'),
+	ecpayRow('20260912225824141', 'H8WQ3Z', '500', '未付款'),
+	ecpayRow('20260912225824142', 'R5TY7U', '500', '已退款'),
+	ecpayRow('20260912225824143', '-', '800', '已付款', 'W2E3R4')
+].join('\r\n');
+
+const eRows = parseCsv(ecpayCsv);
+const ecpay = parseEcpay(eRows);
+const eBy = (ref: string) => ecpay.find((p) => p.orderRef.endsWith(ref))!;
+
+t('認得出綠界格式', () => assert.equal(detectFormat(eRows), 'ecpay'));
+t('一張訂單一列', () => assert.equal(ecpay.length, 6));
+t('代碼從贊助者留言抓，夾在句子裡也抓得到', () => {
+	assert.equal(eBy('138').code, 'JDDTN4');
+	assert.equal(eBy('139').code, 'P4TR9N');
+});
+t('金額可含千分位', () => assert.equal(eBy('139').amountTwd, 1200));
+t('留言是「-」視為沒填', () => {
+	assert.equal(eBy('140').rawCode, '');
+	assert.equal(eBy('140').code, null);
+});
+t('未付款 → 不能發', () => assert.equal(eBy('141').block, 'not-paid'));
+t('已退款 → 不能發', () => assert.equal(eBy('142').block, 'cancelled'));
+t('已付款 → 可以發', () => assert.equal(eBy('138').block, null));
+t('留言沒填時退回廠商備註', () => assert.equal(eBy('143').code, 'W2E3R4'));
+t('綠界檔不會被當成賣貨便', () => assert.equal(parseMyship(eRows).length, 0));
+
 console.log('其他格式');
 
 t('一般 CSV 不會被誤認成賣貨便', () =>
@@ -154,7 +201,8 @@ console.log(`\n${passed} 項全部通過`);
 const real = process.argv[2];
 if (real) {
 	const realRows = parseCsv(fs.readFileSync(real, 'utf8'));
-	const res = parseMyship(realRows);
+	const format = detectFormat(realRows);
+	const res = format === 'ecpay' ? parseEcpay(realRows) : parseMyship(realRows);
 	const count = (k: string | null) => res.filter((r) => r.block === k).length;
 	console.log(`\n真實檔案：格式 ${detectFormat(realRows)}，訂單 ${res.length} 張`);
 	console.log(`  可發放候選（已付款）${count(null)}、未付款 ${count('not-paid')}、已合併 ${count('merged')}、取消 ${count('cancelled')}`);

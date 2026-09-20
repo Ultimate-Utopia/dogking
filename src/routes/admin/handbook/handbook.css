@@ -166,6 +166,10 @@
 	background: color-mix(in srgb, var(--red) 14%, transparent);
 	color: var(--red);
 }
+.st.wait {
+	background: color-mix(in srgb, var(--wait, #96650c) 16%, transparent);
+	color: var(--wait, #96650c);
+}
 .st.done {
 	background: var(--paper);
 	color: var(--muted);
