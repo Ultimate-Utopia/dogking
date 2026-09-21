@@ -717,15 +717,44 @@ a.member:hover {
 	line-height: 1.8;
 }
 
+/* 主辦方要求寬螢幕 4 場一排。頁面最寬 980px，扣掉邊距每張卡約 210px，
+   手機放不下 4 張，所以依寬度退成 2 張、1 張。 */
+.bars-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 10px;
+}
+@media (min-width: 560px) {
+	.bars-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@media (min-width: 900px) {
+	.bars-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
 .bar {
+	/* 卡片內的排法看「卡片本身」多寬，而不是看螢幕 —— 同一張卡在 4 欄與 1 欄時寬度差很多 */
+	container-type: inline-size;
+	display: flex;
+	flex-direction: column;
 	border: 1px solid var(--line);
 	border-radius: 9px;
 	padding: 11px 13px;
-	margin-bottom: 10px;
 	background: var(--paper);
+	min-width: 0;
 }
-.bar:last-child {
-	margin-bottom: 0;
+/* 展開下注的那一張佔滿整排：窄卡裡放不下陣營按鈕、籌碼與確認 */
+.bar.bar-wide {
+	grid-column: 1 / -1;
+}
+/* 對戰雙方以下的內容（彩池、下注按鈕）推到卡片底部，同一排的長條與按鈕才會對齊。
+   只能推一處：兩處都用 auto 的話，空白會被平分，反而對不齊 */
+.bar .bar-vs {
+	margin-bottom: auto;
+	padding-bottom: 9px;
 }
 /* 還能下注的場次要跳出來，觀眾多半是來找「現在能押什麼」 */
 .bar.bar-open {
@@ -828,7 +857,12 @@ a.member:hover {
 }
 
 .bar-bet {
-	display: block;
+	/* 固定高度：按鈕與「不能下注」的說明字級不同，高度一樣卡片底部才對得齊 */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	height: 44px;
 	width: 100%;
 	margin-top: 10px;
 	font-family: inherit;
@@ -836,7 +870,7 @@ a.member:hover {
 	font-weight: 700;
 	text-align: center;
 	text-decoration: none;
-	padding: 9px 14px;
+	padding: 0 14px;
 	border-radius: 7px;
 	border: 1px solid var(--blue);
 	background: transparent;
@@ -851,4 +885,73 @@ a.member:hover {
 	margin-top: 10px;
 	padding-top: 10px;
 	border-top: 1px solid var(--line);
+}
+
+/* 窄卡（4 欄或 2 欄時）：雙方改成上下排，輪次名稱另起一行，名字才不會被切掉 */
+@container (max-width: 260px) {
+	.bar-round {
+		flex-basis: 100%;
+		order: 5;
+	}
+	.bar-vs {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 3px;
+	}
+	.bar-name.r {
+		justify-content: flex-start;
+		text-align: left;
+	}
+	.bar-x {
+		padding-left: 2px;
+	}
+}
+
+/* 場次卡片右上角的狀態。觀眾最想知道「哪幾場還能押」，所以開放中要最醒目。
+   （.tag 原本只定義在後台的 admin.css，前台一直是沒有樣式的灰字） */
+.bar-head .tag {
+	margin-left: auto;
+	font-size: 11px;
+	font-weight: 700;
+	padding: 2px 8px;
+	border-radius: 4px;
+	white-space: nowrap;
+	border: 1px solid;
+}
+.bar-head .t-open {
+	color: var(--ok);
+	border-color: var(--ok);
+	background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.bar-head .t-locked {
+	color: var(--wait, #96650c);
+	border-color: var(--wait, #96650c);
+}
+.bar-head .t-settled {
+	color: var(--blue);
+	border-color: var(--blue);
+}
+.bar-head .t-void {
+	color: var(--red);
+	border-color: var(--red);
+}
+.bar-head .t-pending {
+	color: var(--muted);
+	border-color: var(--line);
+}
+.bar-head .cd {
+	margin-left: auto;
+}
+
+/* 不能下注時佔住按鈕位置的說明文字，高度與按鈕相同 */
+.bar-bet.off {
+	border-color: transparent;
+	background: transparent;
+	color: var(--muted);
+	font-size: 13px;
+	font-weight: 500;
+	cursor: default;
+}
+.bar-bet.off:hover {
+	background: transparent;
 }

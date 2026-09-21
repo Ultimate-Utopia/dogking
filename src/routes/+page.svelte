@@ -612,12 +612,18 @@
 				押的是那一側，例如「M1 勝者」。主持人會在每場開打前約一分鐘收盤，收盤後就不能再下注。
 			</p>
 
+			<div class="bars-grid">
 			{#each board.bars as bar (bar.matchId)}
 				{@const mk = bar.market}
 				{@const canPick = barOpen(bar)}
 				{@const left = mk ? remaining(mk.lockAt) : null}
 				{@const expanded = openBar === bar.matchId && canPick}
-				<div class="bar" class:bar-open={canPick} class:bar-done={bar.matchState === 'done'}>
+				<div
+					class="bar"
+					class:bar-open={canPick}
+					class:bar-done={bar.matchState === 'done'}
+					class:bar-wide={expanded}
+				>
 					<div class="bar-head">
 						<span class="bar-no">M{bar.orderNo}</span>
 						<span class="bar-fmt">{bar.format}</span>
@@ -628,6 +634,8 @@
 							<span class="tag t-open">開放下注</span>
 						{:else if mk?.state === 'settled'}
 							<span class="tag t-settled">已派彩</span>
+						{:else if mk?.state === 'void'}
+							<span class="tag t-void">已取消</span>
 						{:else if mk}
 							<span class="tag t-locked">已封盤</span>
 						{:else}
@@ -693,6 +701,17 @@
 								{expanded ? '收合' : '下注'}
 							</button>
 						{/if}
+					{:else}
+						<!--
+							不能下注時也佔住按鈕的位置：同一排的卡片底部才會對齊，
+							觀眾也看得到「為什麼不能押」，而不是按鈕憑空消失。
+						-->
+						<div class="bar-bet off">
+							{#if mk?.state === 'void'}已取消，押注已全數退還
+							{:else if mk?.state === 'settled'}已派彩
+							{:else if mk}已封盤，等待賽果
+							{:else}尚未開放下注{/if}
+						</div>
 					{/if}
 
 					{#if expanded && mk}
@@ -741,6 +760,7 @@
 					{/if}
 				</div>
 			{/each}
+			</div>
 		</div>
 	{/if}
 
