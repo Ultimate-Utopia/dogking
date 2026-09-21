@@ -434,3 +434,21 @@
 	font-size: 12px;
 	color: var(--ink);
 }
+
+/* 上傳訂單檔的大按鈕。主辦方會用手機操作，要夠大、一眼找得到。
+   原生的檔案選擇器藏在按鈕底下，按鈕文字才看得懂。 */
+.upload-btn {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 52px;
+	font-size: 16px;
+	overflow: hidden;
+}
+.upload-btn input {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	cursor: pointer;
+}

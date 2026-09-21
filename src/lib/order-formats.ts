@@ -3,7 +3,10 @@
  *
  * 刻意不引用資料庫或任何其他模組：這裡只有純函式，
  * 可以直接用 node 跑測試（scripts/test-order-formats.ts），不需要連線。
- * 對帳號、查重複、發幣都在 purchase.ts。
+ * 對帳號、查重複、發幣都在 server/purchase.ts。
+ *
+ * 放在 $lib 而不是 $lib/server：瀏覽器端也要用 —— 上傳前先在操作員手機上
+ * 把姓名、手機、地址等欄位拿掉（stripUnusedColumns），個資就不會送到伺服器。
  */
 
 /** 排除 0/O/1/I/L —— 手寫或口述時最容易看錯的幾個。訂單備註碼只會用這些字元。 */
@@ -26,7 +29,11 @@ export interface ParsedOrder {
 	statusText: string;
 }
 
-export type OrderFormat = 'myship' | 'ecpay' | 'columns';
+/**
+ * 'ecpay-donation' 是「認得出來但刻意拒收」的格式：綠界贊助頁的匯出檔。
+ * 那是觀眾贊助實況主的紀錄，不是周邊訂單，拿來發幣就是把贊助當成購買。
+ */
+export type OrderFormat = 'myship' | 'ecpay' | 'ecpay-donation' | 'columns';
 
 // ─────────────────────────────────────────────────────────
 // CSV
@@ -136,6 +143,7 @@ function findMyshipHeader(rows: string[][]): number {
 export function detectFormat(rows: string[][]): OrderFormat {
 	if (findMyshipHeader(rows) >= 0) return 'myship';
 	if (findEcpayHeader(rows) >= 0) return 'ecpay';
+	if (findEcpayDonationHeader(rows) >= 0) return 'ecpay-donation';
 	return 'columns';
 }
 
@@ -235,17 +243,23 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
 // ─────────────────────────────────────────────────────────
 
 /**
- * 綠界「贊助 / 收款」匯出檔的特徵：
+ * 綠界商店「訂單明細」匯出檔（2026-09-21 主辦方提供的正確版本）。
  *
- *   ・第 1 列就是標題，一張訂單一列（不像賣貨便會拆成多列）
- *   ・代碼填在「贊助者留言」，那是結帳時給觀眾打字的欄位
- *   ・有「付款狀態」欄（已付款 / 未付款 / 退款…），金額欄是「交易金額」
+ *   ・第 1 列就是標題，一張訂單一列
+ *   ・代碼填在「買家備註」
+ *   ・「訂單總金額」含運費，另有「運費」欄 —— 這次活動的狗狗幣不含運費，要扣掉
+ *   ・⚠️ 只能用 Excel 匯出。綠界的 CSV 匯出欄位會亂序，不能用
  *
- * ⚠️ 這份檔案含姓名、手機、電子信箱、地址等個資欄位。
- * 解析時刻意只讀訂單編號、金額、付款狀態與留言 —— 其他欄位連碰都不碰，
- * 也不會寫進資料庫或後台操作紀錄。
+ * 付款與否看「付款日期」有沒有值，不看「訂單狀態」。
+ * 實際資料中三張超商取貨付款的訂單都是「待出貨」，付款日期全是空的 ——
+ * 買家要到門市取件時才付錢。只看狀態的話，這些還沒付錢的訂單就會被發幣。
+ *
+ * ⚠️ 這份檔案有付款人與收件人的姓名、手機、Email、地址。
+ * 解析只讀訂單編號、訂單狀態、付款日期、運費、訂單總金額、買家備註；
+ * 瀏覽器端上傳前也會先把其他欄位拿掉（見 stripUnusedColumns）。
  */
-const ECPAY_REQUIRED = ['訂單編號', '交易金額', '付款狀態'];
+const ECPAY_REQUIRED = ['訂單編號', '訂單狀態', '付款日期', '運費', '訂單總金額'];
+const ECPAY_KEEP = [...ECPAY_REQUIRED, '買家備註'];
 
 function findEcpayHeader(rows: string[][]): number {
 	for (let i = 0; i < Math.min(rows.length, 6); i++) {
@@ -255,14 +269,19 @@ function findEcpayHeader(rows: string[][]): number {
 	return -1;
 }
 
-/**
- * 付款狀態 → 能不能發幣。
- * 綠界的狀態是中文字串，退款與失敗都當成不發，其餘非「已付款」一律視為尚未付款。
- */
-function ecpayBlock(status: string): OrderBlock {
-	if (/退款|取消|失敗/.test(status)) return 'cancelled';
-	if (status.includes('已付款')) return null;
-	return 'not-paid';
+/** 綠界贊助頁的匯出檔。只用來認出來並拒收，見 OrderFormat 的說明。 */
+function findEcpayDonationHeader(rows: string[][]): number {
+	for (let i = 0; i < Math.min(rows.length, 6); i++) {
+		const cells = rows[i].map(norm);
+		if (['訂單編號', '交易金額', '付款狀態', '贊助者留言'].every((h) => cells.includes(h))) return i;
+	}
+	return -1;
+}
+
+function ecpayBlock(status: string, paidAt: string): OrderBlock {
+	if (/取消|退款|退貨|失敗/.test(status)) return 'cancelled';
+	if (!paidAt || paidAt === '-') return 'not-paid';
+	return null;
 }
 
 export function parseEcpay(rows: string[][]): ParsedOrder[] {
@@ -273,11 +292,11 @@ export function parseEcpay(rows: string[][]): ParsedOrder[] {
 	const col = (name: string) => header.indexOf(name);
 
 	const cRef = col('訂單編號');
-	const cAmount = col('交易金額');
-	const cStatus = col('付款狀態');
-	// 代碼優先看贊助者留言（觀眾自己打的），沒有才看廠商備註（我們自己註記的）
-	const cNote = col('贊助者留言');
-	const cShopNote = col('廠商備註');
+	const cStatus = col('訂單狀態');
+	const cPaidAt = col('付款日期');
+	const cShip = col('運費');
+	const cTotal = col('訂單總金額');
+	const cNote = col('買家備註');
 
 	const out: ParsedOrder[] = [];
 
@@ -285,28 +304,63 @@ export function parseEcpay(rows: string[][]): ParsedOrder[] {
 		const orderRef = (r[cRef] ?? '').trim();
 		if (!orderRef) continue;
 
-		const amountTwd = money(r[cAmount]);
+		const total = money(r[cTotal]);
+		const shipping = money(r[cShip]) || 0;
+		// 狗狗幣不含運費（主辦方 09-21 確認）
+		const amountTwd = Number.isFinite(total) ? total - shipping : NaN;
+
 		let rawCode = cNote >= 0 ? (r[cNote] ?? '').trim() : '';
-		// 綠界空欄位會匯出成「-」
 		if (rawCode === '-') rawCode = '';
-		if (!rawCode && cShopNote >= 0) {
-			const shop = (r[cShopNote] ?? '').trim();
-			if (shop !== '-') rawCode = shop;
-		}
 
 		const status = (r[cStatus] ?? '').trim();
 		out.push({
 			orderRef,
 			amountTwd,
-			totalTwd: amountTwd,
+			totalTwd: total,
 			rawCode,
 			code: rawCode ? extractCode(rawCode) : null,
-			block: ecpayBlock(status),
+			block: ecpayBlock(status, (r[cPaidAt] ?? '').trim()),
 			statusText: status
 		});
 	}
 
 	return out;
+}
+
+// ─────────────────────────────────────────────────────────
+// 上傳前拿掉用不到的欄位
+// ─────────────────────────────────────────────────────────
+
+/**
+ * 認得出格式時，只保留解析會用到的欄位。
+ *
+ * 匯出檔裡有買家的姓名、手機、Email、地址。整份上傳的話，這些個資會經過我們的伺服器，
+ * 還會在「預覽 → 確認發放」之間來回傳一次。在瀏覽器裡先拿掉，個資就不會離開操作員的手機。
+ *
+ * 認不出格式時原樣回傳 —— 那時要靠操作員手動指定「第幾欄」，拿掉欄位會讓欄號對不上。
+ */
+export function stripUnusedColumns(rows: string[][]): string[][] {
+	let h = -1;
+	let keep: (name: string) => boolean = () => true;
+
+	const format = detectFormat(rows);
+	if (format === 'ecpay') {
+		h = findEcpayHeader(rows);
+		keep = (n) => ECPAY_KEEP.includes(n);
+	} else if (format === 'myship') {
+		h = findMyshipHeader(rows);
+		keep = (n) =>
+			MYSHIP_REQUIRED.includes(n) ||
+			n.startsWith('商品總額') ||
+			n.startsWith('使用平台運費券') ||
+			n.startsWith('回饋資訊') ||
+			n === '訂單備註';
+	} else {
+		return rows;
+	}
+
+	const cols = rows[h].map((c, i) => (keep(norm(c)) ? i : -1)).filter((i) => i >= 0);
+	return rows.map((r) => cols.map((i) => r[i] ?? ''));
 }
 
 // ─────────────────────────────────────────────────────────

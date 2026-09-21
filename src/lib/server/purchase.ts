@@ -22,7 +22,7 @@ import {
 	parseByColumns,
 	type ParsedOrder,
 	type OrderFormat
-} from './order-formats';
+} from '../order-formats';
 
 // 解析函式搬到 order-formats.ts（純函式、可不連資料庫測試），這裡照舊匯出，呼叫端不必改
 export { parseCsv, extractCode };
@@ -240,6 +240,13 @@ export async function previewCsv(
 ): Promise<{ format: OrderFormat; platform: string; rows: ImportRow[] }> {
 	const table = parseCsv(csv);
 	const format = detectFormat(table);
+
+	if (format === 'ecpay-donation') {
+		throw new PurchaseError(
+			'這是綠界「贊助頁」的匯出檔，不是周邊商店的訂單，不能用來發幣。' +
+				'請到綠界商店後台匯出「訂單明細」（Excel）再上傳。'
+		);
+	}
 
 	if (format === 'myship') {
 		const platform = '賣貨便';

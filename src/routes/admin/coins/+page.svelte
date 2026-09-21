@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { tick } from 'svelte';
+	import { readXlsx, toCsv, XlsxError } from '$lib/xlsx';
+	import { parseCsv, stripUnusedColumns, detectFormat } from '$lib/order-formats';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -45,21 +48,78 @@
 	 * 但舊版 Excel 另存的 CSV 常常是 Big5，直接當 UTF-8 讀會變亂碼。
 	 * 伺服器端完全不變：拿到的一樣是文字，和手動貼上走同一條路。
 	 */
+	let previewForm = $state<HTMLFormElement | null>(null);
+	let reading = $state(false);
+
+	/** 檔案裡認出的格式，顯示給操作員確認 */
+	const FORMAT_LABEL: Record<string, string> = {
+		myship: '賣貨便',
+		ecpay: '綠界商店',
+		'ecpay-donation': '綠界贊助頁（不能用）',
+		columns: '未知格式'
+	};
+	let fileFormat = $state('');
+
+	/**
+	 * 讀取選擇的檔案 → 在瀏覽器裡拿掉個資欄位 → 自動送出預覽。
+	 *
+	 * 主辦方要能用手機操作，所以步驟壓到最少：選檔之後就直接出現預覽，
+	 * 不必再按一次「預覽」。預覽本身不會發任何幣。
+	 *
+	 * Excel（.xlsx）在瀏覽器裡直接讀，不必先轉 CSV —— 綠界的 CSV 匯出會亂序，
+	 * 只有 Excel 版是對的。CSV 則先當 UTF-8 解，解不開再試 Big5（舊版 Excel 另存的常見編碼）。
+	 *
+	 * 送到伺服器的仍然是 CSV 文字，伺服器端完全不用區分檔案類型。
+	 */
 	async function readFile(e: Event) {
 		fileError = '';
-		const file = (e.currentTarget as HTMLInputElement).files?.[0];
+		fileFormat = '';
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
 		if (!file) return;
-		if (/\.xlsx?$/i.test(file.name)) {
-			fileError = '目前只能讀 CSV。請用 Excel 或 Google 試算表打開後「另存為 CSV」再選一次。';
-			return;
-		}
-		const bytes = new Uint8Array(await file.arrayBuffer());
+
+		reading = true;
 		try {
-			csvText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-		} catch {
-			csvText = new TextDecoder('big5').decode(bytes);
+			let rows: string[][];
+			if (/\.xlsx$/i.test(file.name)) {
+				if (typeof DecompressionStream === 'undefined') {
+					throw new XlsxError('這個瀏覽器太舊，讀不了 Excel。請更新瀏覽器，或改用電腦操作。');
+				}
+				rows = await readXlsx(await file.arrayBuffer());
+			} else if (/\.xls$/i.test(file.name)) {
+				throw new XlsxError('這是舊版 Excel（.xls）。請用 Excel 另存為 .xlsx 或 CSV 再選一次。');
+			} else {
+				const bytes = new Uint8Array(await file.arrayBuffer());
+				let text: string;
+				try {
+					text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+				} catch {
+					text = new TextDecoder('big5').decode(bytes);
+				}
+				rows = parseCsv(text);
+			}
+
+			if (!rows.length) throw new XlsxError('檔案裡沒有任何資料');
+
+			const format = detectFormat(rows);
+			fileFormat = FORMAT_LABEL[format] ?? format;
+			csvText = toCsv(stripUnusedColumns(rows));
+			fileName = file.name;
+
+			// 認得出格式才自動預覽；認不出來要先讓操作員指定欄位
+			if (format !== 'columns') {
+				await tick();
+				previewForm?.requestSubmit();
+			}
+		} catch (err) {
+			fileError = err instanceof XlsxError ? err.message : '檔案讀不出來，請確認是從平台匯出的 Excel 或 CSV';
+			csvText = '';
+			fileName = '';
+		} finally {
+			reading = false;
+			// 清掉選擇，同一個檔案改過之後再選一次也會觸發
+			input.value = '';
 		}
-		fileName = file.name;
 	}
 
 	const ctx = $derived(form && 'imported' in form ? form.imported : null);
@@ -214,16 +274,28 @@
 <h2>匯入訂單</h2>
 <div class="panel">
 	<p class="hint" style="margin:0 0 14px">
-		選擇從賣貨便匯出的 CSV 就好，系統會自動辨識欄位、只挑出已付款的訂單。
-		<strong>按下預覽不會發任何幣。</strong>
-		同一份檔案重複匯入是安全的，已發過的訂單會自動略過。
+		選擇平台匯出的檔案，<strong>選完就會自動出現預覽</strong>，確認數字後按「確認發放」。
+		<strong>綠界請用 Excel（.xlsx）</strong>，它的 CSV 欄位會亂序；賣貨便的 Excel 或 CSV 都可以。
+		預覽不會發任何幣，同一份檔案重複匯入也不會重複發。
 	</p>
 
-	<form method="POST" action="?/preview">
-		<div class="field-row" style="margin-bottom:12px;align-items:center">
-			<input type="file" accept=".csv,text/csv" onchange={readFile} />
-			{#if fileName}<span class="hint" style="margin:0">已讀取：{fileName}</span>{/if}
-		</div>
+	<form method="POST" action="?/preview" bind:this={previewForm}>
+		<label class="b b-go upload-btn">
+			{reading ? '讀取中…' : '選擇訂單檔（Excel 或 CSV）'}
+			<input
+				type="file"
+				accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+				onchange={readFile}
+				disabled={reading}
+			/>
+		</label>
+		{#if fileName}
+			<p class="hint" style="margin:10px 0 0">
+				已讀取：{fileName}{#if fileFormat}　·　辨識為 <strong>{fileFormat}</strong>{/if}
+			</p>
+		{/if}
+		{#if fileError}<div class="err" style="margin:12px 0">{fileError}</div>{/if}
+		<div style="height:12px"></div>
 		{#if fileError}<div class="err" style="margin-bottom:12px">{fileError}</div>{/if}
 
 		<details style="margin-bottom:12px">

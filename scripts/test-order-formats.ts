@@ -2,21 +2,23 @@
  * 訂單匯出檔解析的測試。不需要資料庫。
  *
  *   node scripts/test-order-formats.ts
- *   node scripts/test-order-formats.ts <賣貨便匯出.csv>   另外對一份真實檔案跑一次，只印統計、不印內容
+ *   node scripts/test-order-formats.ts <匯出檔.csv 或 .xlsx>   另外對一份真實檔案跑一次，只印統計、不印內容
  *
  * 測試資料是依真實賣貨便匯出檔的「結構」捏造的，裡面沒有任何真實個資。
  * 真實檔案含買家姓名與取件門市，不要放進版控。
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { readXlsx } from '../src/lib/xlsx.ts';
 import {
 	parseCsv,
 	extractCode,
 	detectFormat,
 	parseMyship,
 	parseEcpay,
-	parseByColumns
-} from '../src/lib/server/order-formats.ts';
+	parseByColumns,
+	stripUnusedColumns
+} from '../src/lib/order-formats.ts';
 
 // ── 依賣貨便匯出檔的欄位結構做一份假資料 ─────────────────
 const HEADER = [
@@ -135,51 +137,71 @@ t('沒有專屬問題時退回訂單備註', () => assert.equal(by('CM0000000000
 t('暱稱欄位裡長得像備註碼的字不會被抓走', () => assert.equal(by('CM0000000000007').code, null));
 t('狀態只留第一行', () => assert.equal(by('CM0000000000005').statusText, '已合併'));
 
-console.log('綠界格式');
+console.log('綠界格式（商店訂單明細）');
 
-// 依真實綠界匯出檔的欄位結構捏造，個資欄位一律留白
-const ECPAY_HEADER = '訂單日期,訂單編號,商品名稱,贊助者留言,付款人,付款方式,交易金額,付款狀態,付款時間,撥款狀態,撥款時間,信用卡授權單號 / 卡號末 4 碼,代碼 / ATM 繳款帳號,開立類型,開立方式,發票號碼,姓名,發票類型,手機號碼,電子信箱,手機載具編號,自然人憑證載具編號,地址,捐贈碼,廠商備註';
-/** 含逗號的欄位要加引號，否則那一列的欄位會整個位移（這是 CSV 本來的規則） */
-const eq = (v: string) => (v.includes(',') ? `"${v.replace(/"/g, '""')}"` : v);
-const ecpayRow = (ref: string, note: string, amount: string, status: string, shopNote = '-') =>
-	[
-		'2026/09/12 22:58:24', ref, '實況主贊助 https://example.com/x', note, '-', '信用卡',
-		amount, status, '2026/09/12 22:59:44', '未撥款', '-', '- / 0107', '-', '-', '-', '-',
-		'-', '-', '-', '-', '-', '-', '-', '-', shopNote
-	]
-		.map(eq)
-		.join(',');
+// 依 09-21 主辦方提供的綠界商店「訂單明細」結構捏造，個資欄位一律用假值
+const ECPAY_HEADER = ['訂單編號', '訂單日期', '訂單狀態', '賣場名稱', '付款方式', '虛擬帳號', '付款日期', '運費', '訂單總金額', '付款人姓名', '付款人手機', '付款人Email', '買家備註', '收件人姓名', '收件人手機', '收件人Email', '收件人地址'];
+const ecpayRow = (ref: string, status: string, pay: string, paidAt: string, ship: string, total: string, note: string) =>
+	[ref, '2026-09-21 20:00:00', status, '狗王周邊-測試', pay, '', paidAt, ship, total, '測試甲', '0900000000', 'a@example.com', note, '測試乙', '0900000001', 'b@example.com', '100 測試地址'];
 
-const ecpayCsv = [
+const ecpayRows = [
 	ECPAY_HEADER,
-	ecpayRow('20260912225824138', 'JDDTN4', '10', '已付款'),
-	ecpayRow('20260912225824139', '幫我加油 代碼 P4TR9N 謝謝', '1,200', '已付款'),
-	ecpayRow('20260912225824140', '-', '300', '已付款'),
-	ecpayRow('20260912225824141', 'H8WQ3Z', '500', '未付款'),
-	ecpayRow('20260912225824142', 'R5TY7U', '500', '已退款'),
-	ecpayRow('20260912225824143', '-', '800', '已付款', 'W2E3R4')
-].join('\r\n');
+	// 超商取貨付款、待出貨、沒有付款日期 → 還沒付錢（真實檔案三張都是這樣）
+	ecpayRow('10000001', '待出貨', '7-ELEVEN超商取貨付款', '', '65', '1415', 'K7M2QX'),
+	// 信用卡已付款：有付款日期
+	ecpayRow('10000002', '待出貨', '信用卡', '2026-09-21 20:05:00', '65', '1265', '我的代碼 P4TR9N 謝謝'),
+	// 取貨付款、買家已取件付款
+	ecpayRow('10000003', '已完成', '全家超商取貨付款', '2026-09-23 18:00:00', '65', '1215', ''),
+	// 已取消（即使有付款日期也不發）
+	ecpayRow('10000004', '已取消', '信用卡', '2026-09-21 20:10:00', '65', '565', 'W2E3R4'),
+	// 退貨
+	ecpayRow('10000005', '退貨完成', '信用卡', '2026-09-21 20:10:00', '65', '565', 'H8WQ3Z')
+];
 
-const eRows = parseCsv(ecpayCsv);
-const ecpay = parseEcpay(eRows);
-const eBy = (ref: string) => ecpay.find((p) => p.orderRef.endsWith(ref))!;
+const ecpay = parseEcpay(ecpayRows);
+const eBy = (ref: string) => ecpay.find((p) => p.orderRef === ref)!;
 
-t('認得出綠界格式', () => assert.equal(detectFormat(eRows), 'ecpay'));
-t('一張訂單一列', () => assert.equal(ecpay.length, 6));
-t('代碼從贊助者留言抓，夾在句子裡也抓得到', () => {
-	assert.equal(eBy('138').code, 'JDDTN4');
-	assert.equal(eBy('139').code, 'P4TR9N');
+t('認得出綠界商店格式', () => assert.equal(detectFormat(ecpayRows), 'ecpay'));
+t('一張訂單一列', () => assert.equal(ecpay.length, 5));
+t('狗狗幣金額要扣掉運費', () => {
+	assert.equal(eBy('10000001').totalTwd, 1415);
+	assert.equal(eBy('10000001').amountTwd, 1350);
 });
-t('金額可含千分位', () => assert.equal(eBy('139').amountTwd, 1200));
-t('留言是「-」視為沒填', () => {
-	assert.equal(eBy('140').rawCode, '');
-	assert.equal(eBy('140').code, null);
+t('沒有付款日期 → 尚未付款（即使狀態是「待出貨」）', () => assert.equal(eBy('10000001').block, 'not-paid'));
+t('有付款日期 → 可以發', () => {
+	assert.equal(eBy('10000002').block, null);
+	assert.equal(eBy('10000003').block, null);
 });
-t('未付款 → 不能發', () => assert.equal(eBy('141').block, 'not-paid'));
-t('已退款 → 不能發', () => assert.equal(eBy('142').block, 'cancelled'));
-t('已付款 → 可以發', () => assert.equal(eBy('138').block, null));
-t('留言沒填時退回廠商備註', () => assert.equal(eBy('143').code, 'W2E3R4'));
-t('綠界檔不會被當成賣貨便', () => assert.equal(parseMyship(eRows).length, 0));
+t('已取消、退貨 → 不能發，即使有付款日期', () => {
+	assert.equal(eBy('10000004').block, 'cancelled');
+	assert.equal(eBy('10000005').block, 'cancelled');
+});
+t('代碼從買家備註抓，夾在句子裡也抓得到', () => {
+	assert.equal(eBy('10000001').code, 'K7M2QX');
+	assert.equal(eBy('10000002').code, 'P4TR9N');
+	assert.equal(eBy('10000003').code, null);
+});
+
+t('上傳前會拿掉姓名、手機、Email、地址', () => {
+	const stripped = stripUnusedColumns(ecpayRows);
+	const all = stripped.flat().join('|');
+	assert.ok(!all.includes('測試甲') && !all.includes('0900000000') && !all.includes('a@example.com') && !all.includes('測試地址'));
+	// 拿掉之後仍然解析得出一模一樣的結果
+	assert.deepEqual(parseEcpay(stripped), ecpay);
+});
+
+t('綠界贊助頁的匯出檔會被認出來（之後拒收）', () => {
+	const donation = [
+		['訂單日期', '訂單編號', '商品名稱', '贊助者留言', '付款人', '付款方式', '交易金額', '付款狀態'],
+		['2026/09/12 22:58:24', '20260912225824138', '實況主贊助', 'JDDTN4', '-', '信用卡', '10', '已付款']
+	];
+	assert.equal(detectFormat(donation), 'ecpay-donation');
+	assert.equal(parseEcpay(donation).length, 0);
+});
+
+t('賣貨便檔拿掉欄位後結果不變', () => {
+	assert.deepEqual(parseMyship(stripUnusedColumns(rows)), parsed);
+});
 
 console.log('其他格式');
 
@@ -200,12 +222,12 @@ console.log(`\n${passed} 項全部通過`);
 // ── 選用：對真實檔案跑一次，只印統計 ─────────────────────
 const real = process.argv[2];
 if (real) {
-	const realRows = parseCsv(fs.readFileSync(real, 'utf8'));
+	const realRows = /\.xlsx$/i.test(real) ? await readXlsx(fs.readFileSync(real)) : parseCsv(fs.readFileSync(real, 'utf8'));
 	const format = detectFormat(realRows);
 	const res = format === 'ecpay' ? parseEcpay(realRows) : parseMyship(realRows);
 	const count = (k: string | null) => res.filter((r) => r.block === k).length;
 	console.log(`\n真實檔案：格式 ${detectFormat(realRows)}，訂單 ${res.length} 張`);
 	console.log(`  可發放候選（已付款）${count(null)}、未付款 ${count('not-paid')}、已合併 ${count('merged')}、取消 ${count('cancelled')}`);
 	console.log(`  金額無法解析 ${res.filter((r) => !Number.isFinite(r.amountTwd)).length} 張`);
-	console.log(`  抓到備註碼樣式 ${res.filter((r) => r.code).length} 張（這份是舊賣場，本來就不該有）`);
+	console.log(`  抓到備註碼樣式 ${res.filter((r) => r.code).length} 張`);
 }
