@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { tick } from 'svelte';
 	import { readXlsx, toCsv, XlsxError } from '$lib/xlsx';
-	import { parseCsv, stripUnusedColumns, detectFormat } from '$lib/order-formats';
+	import { parseCsv, stripUnusedColumns, detectFormat, ECPAY_DEFAULT_SHOP } from '$lib/order-formats';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -171,6 +171,18 @@
 {#if preview}
 	<div class="confirm">
 		<h3>匯入預覽 —— 尚未發放</h3>
+		{#if ctx?.format === 'ecpay' && ctx.shop}
+			<p class="hint" style="margin:0 0 8px">
+				已辨識為<strong>綠界商店訂單明細</strong>：只算<strong>賣場「{ctx.shop}」</strong>的訂單，
+				金額<strong>不含運費</strong>，<strong>信用卡才視為已付款</strong>（超商取貨付款在這份報表看不出有沒有收到錢）。
+				{#if ctx.shops.length > 1}
+					<br />檔案裡其他賣場已略過：{ctx.shops
+						.filter((s) => !s.name.includes(ctx.shop))
+						.map((s) => `${s.name}（${s.count} 筆）`)
+						.join('、')}
+				{/if}
+			</p>
+		{/if}
 		{#if ctx?.format === 'myship'}
 			<p class="hint" style="margin:0 0 8px">
 				已辨識為<strong>賣貨便匯出檔</strong>：只發放已付款的訂單，計幣金額<strong>不含運費</strong>。
@@ -217,6 +229,7 @@
 										<input type="hidden" name="orderRef" value={r.orderRef} />
 										<input type="hidden" name="amountTwd" value={r.amountTwd} />
 										<input type="hidden" name="platform" value={ctx?.platform ?? ''} />
+										<input type="hidden" name="shop" value={ctx?.shop ?? ''} />
 										<input type="hidden" name="csv" value={ctx?.csv ?? ''} />
 										{#if ctx?.hasHeader}<input type="hidden" name="hasHeader" value="on" />{/if}
 										<input type="hidden" name="colOrderRef" value={ctx?.cols.orderRef ?? 0} />
@@ -252,6 +265,7 @@
 			     避免預覽到確認之間資料已經被別人改過 -->
 			<form method="POST" action="?/commit">
 				<input type="hidden" name="platform" value={ctx?.platform ?? ''} />
+				<input type="hidden" name="shop" value={ctx?.shop ?? ''} />
 				<input type="hidden" name="csv" value={ctx?.csv ?? ''} />
 				{#if ctx?.hasHeader}
 					<input type="hidden" name="hasHeader" value="on" />
@@ -307,6 +321,10 @@
 				<strong>這種模式看不到付款狀態，請先自行篩出已付款的訂單。</strong>
 			</p>
 			<div class="field-row" style="margin-bottom:12px">
+				<div class="field" style="flex:1;min-width:200px">
+					<label for="shop">賣場名稱（綠界用，只抓名稱含這段文字的訂單）</label>
+					<input id="shop" name="shop" value={ECPAY_DEFAULT_SHOP} />
+				</div>
 				<div class="field">
 					<label for="pf">來源平台</label>
 					<select id="pf" name="platform">

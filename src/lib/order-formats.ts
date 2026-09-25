@@ -243,23 +243,23 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
 // ─────────────────────────────────────────────────────────
 
 /**
- * 綠界商店「訂單明細」匯出檔（2026-09-21 主辦方提供的正確版本）。
+ * 綠界商店「訂單明細」匯出檔。
  *
  *   ・第 1 列就是標題，一張訂單一列
  *   ・代碼填在「買家備註」
- *   ・「訂單總金額」含運費，另有「運費」欄 —— 這次活動的狗狗幣不含運費，要扣掉
+ *   ・「訂單總金額」含運費，另有「運費」欄 —— 狗狗幣不含運費，要扣掉（運費可能是 0）
  *   ・⚠️ 只能用 Excel 匯出。綠界的 CSV 匯出欄位會亂序，不能用
+ *   ・欄位順序在不同版本的匯出檔不一樣（09-21 與 09-23 兩份就不同），
+ *     所以一律用「欄位名稱」找欄，不寫死第幾欄
  *
- * 付款與否看「付款日期」有沒有值，不看「訂單狀態」。
- * 實際資料中三張超商取貨付款的訂單都是「待出貨」，付款日期全是空的 ——
- * 買家要到門市取件時才付錢。只看狀態的話，這些還沒付錢的訂單就會被發幣。
- *
- * ⚠️ 這份檔案有付款人與收件人的姓名、手機、Email、地址。
- * 解析只讀訂單編號、訂單狀態、付款日期、運費、訂單總金額、買家備註；
- * 瀏覽器端上傳前也會先把其他欄位拿掉（見 stripUnusedColumns）。
+ * ⚠️ 這份檔案有付款人與收件人的姓名、手機、Email、地址，還有發票資料。
+ * 解析只讀下面 ECPAY_KEEP 那幾欄；瀏覽器端上傳前也會先把其他欄位拿掉。
  */
-const ECPAY_REQUIRED = ['訂單編號', '訂單狀態', '付款日期', '運費', '訂單總金額'];
-const ECPAY_KEEP = [...ECPAY_REQUIRED, '買家備註'];
+const ECPAY_REQUIRED = ['訂單編號', '訂單狀態', '付款方式', '運費', '訂單總金額'];
+const ECPAY_KEEP = [...ECPAY_REQUIRED, '賣場名稱', '付款日期', '買家備註'];
+
+/** 主辦方的賽事賣場。匯出時會連同一個帳號的其他賣場一起下載，要濾掉。 */
+export const ECPAY_DEFAULT_SHOP = '終焉狗王大賽';
 
 function findEcpayHeader(rows: string[][]): number {
 	for (let i = 0; i < Math.min(rows.length, 6); i++) {
@@ -278,13 +278,44 @@ function findEcpayDonationHeader(rows: string[][]): number {
 	return -1;
 }
 
-function ecpayBlock(status: string, paidAt: string): OrderBlock {
+/**
+ * 這張訂單的錢收到了沒有。
+ *
+ * 依主辦方 09-23 的說明：**信用卡就視為已付款**，不必等出貨。
+ * 實測一份 102 筆的匯出檔：付款日期只有信用卡才會有值，
+ * 超商取貨付款即使「已出貨」也是空的，發票與收據欄位也全空 ——
+ * 也就是說，<b>這份報表看不出超商取貨付款有沒有收到錢</b>，只能靠信用卡判斷。
+ *
+ * 刻意不限定「待出貨」：主辦方原話是「待出貨＋信用卡視為已付款」，
+ * 但同一份檔案裡有 9 筆「已出貨＋信用卡」—— 出貨代表更晚的階段，錢當然早就收了。
+ * 只認待出貨的話，這些在兩次匯入之間出貨的訂單就永遠領不到狗狗幣。
+ */
+function ecpayBlock(status: string, payment: string, paidAt: string): OrderBlock {
 	if (/取消|退款|退貨|失敗/.test(status)) return 'cancelled';
-	if (!paidAt || paidAt === '-') return 'not-paid';
-	return null;
+	if (payment.includes('信用卡')) return null;
+	if (paidAt && paidAt !== '-') return null;
+	return 'not-paid';
 }
 
-export function parseEcpay(rows: string[][]): ParsedOrder[] {
+/** 匯出檔裡有哪些賣場、各幾筆。用來在濾不到訂單時告訴操作員檔案裡到底有什麼。 */
+export function ecpayShops(rows: string[][]): { name: string; count: number }[] {
+	const h = findEcpayHeader(rows);
+	if (h < 0) return [];
+	const cShop = rows[h].map(norm).indexOf('賣場名稱');
+	if (cShop < 0) return [];
+
+	const tally = new Map<string, number>();
+	for (const r of rows.slice(h + 1)) {
+		const name = (r[cShop] ?? '').trim();
+		if (name) tally.set(name, (tally.get(name) ?? 0) + 1);
+	}
+	return [...tally].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+}
+
+/**
+ * @param shop 只保留賣場名稱含這段文字的訂單。空字串代表不過濾。
+ */
+export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedOrder[] {
 	const h = findEcpayHeader(rows);
 	if (h < 0) return [];
 
@@ -293,10 +324,12 @@ export function parseEcpay(rows: string[][]): ParsedOrder[] {
 
 	const cRef = col('訂單編號');
 	const cStatus = col('訂單狀態');
+	const cPay = col('付款方式');
 	const cPaidAt = col('付款日期');
 	const cShip = col('運費');
 	const cTotal = col('訂單總金額');
 	const cNote = col('買家備註');
+	const cShop = col('賣場名稱');
 
 	const out: ParsedOrder[] = [];
 
@@ -304,23 +337,28 @@ export function parseEcpay(rows: string[][]): ParsedOrder[] {
 		const orderRef = (r[cRef] ?? '').trim();
 		if (!orderRef) continue;
 
+		// 其他賣場的訂單直接跳過 —— 那是別的商品，不屬於這次活動
+		if (shop && cShop >= 0 && !(r[cShop] ?? '').includes(shop)) continue;
+
 		const total = money(r[cTotal]);
+		// 運費可能是 0 或空白，兩種都當 0
 		const shipping = money(r[cShip]) || 0;
-		// 狗狗幣不含運費（主辦方 09-21 確認）
 		const amountTwd = Number.isFinite(total) ? total - shipping : NaN;
 
 		let rawCode = cNote >= 0 ? (r[cNote] ?? '').trim() : '';
 		if (rawCode === '-') rawCode = '';
 
 		const status = (r[cStatus] ?? '').trim();
+		const payment = (r[cPay] ?? '').trim();
 		out.push({
 			orderRef,
 			amountTwd,
 			totalTwd: total,
 			rawCode,
 			code: rawCode ? extractCode(rawCode) : null,
-			block: ecpayBlock(status, (r[cPaidAt] ?? '').trim()),
-			statusText: status
+			block: ecpayBlock(status, payment, cPaidAt >= 0 ? (r[cPaidAt] ?? '').trim() : ''),
+			// 兩個都寫出來，操作員才看得懂為什麼這筆不能發
+			statusText: payment ? `${status}・${payment}` : status
 		});
 	}
 

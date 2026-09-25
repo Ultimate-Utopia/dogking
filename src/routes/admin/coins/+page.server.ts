@@ -13,6 +13,7 @@ import {
 	PurchaseError,
 	CHIPS_PER_TWD
 } from '$lib/server/purchase';
+import { ECPAY_DEFAULT_SHOP } from '$lib/order-formats';
 
 export const load: PageServerLoad = async () => {
 	const [orders, stats, codes] = await Promise.all([recentOrders(20), codeStats(), unusedCodes(30)]);
@@ -28,6 +29,7 @@ export const actions: Actions = {
 		const platform = String(form.get('platform') ?? '賣貨便');
 		const csv = String(form.get('csv') ?? '');
 		const hasHeader = form.get('hasHeader') === 'on';
+		const shop = String(form.get('shop') ?? ECPAY_DEFAULT_SHOP).trim();
 		const cols = {
 			orderRef: Number(form.get('colOrderRef') ?? 0),
 			amount: Number(form.get('colAmount') ?? 1),
@@ -37,8 +39,16 @@ export const actions: Actions = {
 		if (!csv.trim()) return fail(400, { error: '請先選擇匯出檔，或貼上 CSV 內容' });
 
 		try {
-			const result = await previewCsv(platform, csv, cols, hasHeader);
+			const result = await previewCsv(platform, csv, cols, hasHeader, shop);
 			if (!result.rows.length) {
+				// 綠界匯出會連同一個帳號的其他賣場一起下載，濾不到時要講清楚檔案裡有什麼
+				if (result.shops?.length) {
+					const list = result.shops.map((s) => `${s.name}（${s.count} 筆）`).join('、');
+					return fail(400, {
+						error: `這份檔案裡沒有賣場名稱含「${shop}」的訂單。檔案裡有：${list}。` +
+							'請確認匯出的是賽事賣場的訂單，或到下方「手動指定欄位」改賣場名稱。'
+					});
+				}
 				return fail(400, { error: '檔案裡找不到任何訂單。若不是賣貨便的匯出檔，請確認欄位位置設定。' });
 			}
 			// 包成單一物件，前端只要檢查 form?.imported 就能安全取用全部欄位。
@@ -51,6 +61,8 @@ export const actions: Actions = {
 					csv,
 					hasHeader,
 					cols,
+					shop: result.shop ?? '',
+					shops: result.shops ?? [],
 					// 與 issueCode 的回傳形狀保持一致，前端才不用處理兩種形狀
 					issued: null as { orderRef: string; code: string; amount: number; reused: boolean } | null
 				}
@@ -82,8 +94,8 @@ export const actions: Actions = {
 
 		if (!csv.trim()) return fail(400, { error: '資料遺失，請重新預覽' });
 
-		// 重新辨識一次；平台名稱以辨識結果為準，與預覽時一致
-		const again = await previewCsv(platform, csv, cols, hasHeader);
+		// 重新辨識一次；平台名稱與賣場過濾都要與預覽時一致
+		const again = await previewCsv(platform, csv, cols, hasHeader, String(form.get('shop') ?? ECPAY_DEFAULT_SHOP).trim());
 		const result = await commitImport(again.platform, again.rows, admin.id);
 		await logAdmin(admin.id, '匯入訂單發幣', again.platform, { ...result, format: again.format });
 
@@ -109,6 +121,7 @@ export const actions: Actions = {
 		const platform = String(form.get('platform') ?? '');
 		const csv = String(form.get('csv') ?? '');
 		const hasHeader = form.get('hasHeader') === 'on';
+		const shop = String(form.get('shop') ?? ECPAY_DEFAULT_SHOP).trim();
 		const cols = {
 			orderRef: Number(form.get('colOrderRef') ?? 0),
 			amount: Number(form.get('colAmount') ?? 1),
@@ -121,7 +134,7 @@ export const actions: Actions = {
 				await logAdmin(admin.id, '為訂單開兌換券', orderRef, { amount: voucher.amount });
 			}
 
-			const result = await previewCsv(platform, csv, cols, hasHeader);
+			const result = await previewCsv(platform, csv, cols, hasHeader, shop);
 			return {
 				imported: {
 					preview: result.rows,
@@ -130,6 +143,8 @@ export const actions: Actions = {
 					csv,
 					hasHeader,
 					cols,
+					shop: result.shop ?? '',
+					shops: result.shops ?? [],
 					issued: {
 						orderRef,
 						code: voucher.code,

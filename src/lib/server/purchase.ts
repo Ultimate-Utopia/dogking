@@ -19,6 +19,8 @@ import {
 	detectFormat,
 	parseMyship,
 	parseEcpay,
+	ecpayShops,
+	ECPAY_DEFAULT_SHOP,
 	parseByColumns,
 	type ParsedOrder,
 	type OrderFormat
@@ -236,8 +238,16 @@ export async function previewCsv(
 	selectedPlatform: string,
 	csv: string,
 	cols: { orderRef: number; amount: number; note: number },
-	hasHeader: boolean
-): Promise<{ format: OrderFormat; platform: string; rows: ImportRow[] }> {
+	hasHeader: boolean,
+	shop: string = ECPAY_DEFAULT_SHOP
+): Promise<{
+	format: OrderFormat;
+	platform: string;
+	rows: ImportRow[];
+	/** 綠界才有：這份檔案裡各賣場的訂單數，以及實際採用的賣場 */
+	shops?: { name: string; count: number }[];
+	shop?: string;
+}> {
 	const table = parseCsv(csv);
 	const format = detectFormat(table);
 
@@ -254,7 +264,13 @@ export async function previewCsv(
 	}
 	if (format === 'ecpay') {
 		const platform = '綠界';
-		return { format, platform, rows: await previewOrders(platform, parseEcpay(table)) };
+		return {
+			format,
+			platform,
+			rows: await previewOrders(platform, parseEcpay(table, shop)),
+			shops: ecpayShops(table),
+			shop
+		};
 	}
 	return {
 		format,
