@@ -107,11 +107,16 @@ export interface ImportRow {
 	voucher: { code: string; used: boolean; usedAt: string | null } | null;
 	status:
 		| 'ready'
+		/** 備註欄整個是空的 */
 		| 'no-code'
+		/** 備註欄有寫東西，但抓不出合法的 6 碼 —— 多半是抄錯或寫成別的格式 */
+		| 'bad-code'
+		/** 抓到 6 碼，但沒有這個帳號 */
 		| 'unknown-code'
 		| 'already-credited'
 		| 'bad-amount'
 		| 'not-paid'
+		| 'other-status'
 		| 'cancelled'
 		| 'merged'
 		| 'voucher-issued'
@@ -197,7 +202,8 @@ export async function previewOrders(
 		else if (voucher) status = 'voucher-issued';
 		else if (o.block) status = o.block;
 		else if (!amountOk) status = 'bad-amount';
-		else if (!o.code) status = 'no-code';
+		// 「沒填」與「填了但看不懂」要分開：前者要去問買家，後者通常是抄錯，直接開券比較快
+		else if (!o.code) status = o.rawCode ? 'bad-code' : 'no-code';
 		else if (!owner) status = 'unknown-code';
 		else status = 'ready';
 

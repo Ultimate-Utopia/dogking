@@ -14,7 +14,9 @@
 	const STATUS: Record<string, { label: string; cls: string }> = {
 		ready: { label: '可發放', cls: 't-open' },
 		'no-code': { label: '沒填代碼', cls: 't-locked' },
+		'bad-code': { label: '代碼看不懂', cls: 't-void' },
 		'unknown-code': { label: '查無此代碼', cls: 't-void' },
+		'other-status': { label: '非待出貨', cls: 't-settled' },
 		'already-credited': { label: '已發放過', cls: 't-settled' },
 		'bad-amount': { label: '金額有問題', cls: 't-void' },
 		'not-paid': { label: '尚未付款', cls: 't-settled' },
@@ -27,6 +29,7 @@
 	/** 這幾種是平台上的狀態造成的，不是操作員要處理的問題，等付款後重匯即可 */
 	const WAITING = new Set([
 		'not-paid',
+		'other-status',
 		'cancelled',
 		'merged',
 		'already-credited',
@@ -35,7 +38,7 @@
 	]);
 
 	/** 需要開券的：已付款、但代碼對不到帳號 */
-	const NEEDS_VOUCHER = new Set(['no-code', 'unknown-code']);
+	const NEEDS_VOUCHER = new Set(['no-code', 'bad-code', 'unknown-code', 'other-status']);
 
 	let csvText = $state('');
 	let fileName = $state('');
@@ -219,7 +222,16 @@
 							<td class="n" title={r.totalTwd !== r.amountTwd ? `實付 ${r.totalTwd}（含運費）` : ''}>
 								{Number.isFinite(r.amountTwd) ? fmt(r.amountTwd) : '—'}
 							</td>
-							<td style="font-family:var(--mono)">{r.code ?? '—'}</td>
+							<td style="font-family:var(--mono);max-width:200px">
+								{#if r.code}
+									{r.code}
+								{:else if r.rawCode}
+									<!-- 抓不到代碼時，把買家原本寫的字顯示出來，操作員才知道是抄錯還是寫了別的 -->
+									<span class="raw-note" title={r.rawCode}>{r.rawCode}</span>
+								{:else}
+									—
+								{/if}
+							</td>
 							<td>{r.displayName ?? '—'}</td>
 							<td class="n">{r.status === 'ready' ? fmt(r.chips) : '—'}</td>
 							<td><span class="tag {STATUS[r.status]?.cls}">{STATUS[r.status]?.label}</span></td>

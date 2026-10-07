@@ -7,6 +7,7 @@
 	import Bracket from '$lib/components/Bracket.svelte';
 	import IdCard from '$lib/components/IdCard.svelte';
 	import PrizeCard from '$lib/components/PrizeCard.svelte';
+	import { sanitizeStake } from '$lib/bet-amount';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -208,6 +209,32 @@
 		if (stake + v <= balance) stake += v;
 		else stake = balance;
 	}
+
+	/**
+	 * 自己打金額。規則與邊界情況都在 sanitizeStake 裡（有測試守著）：
+	 * 正整數、不超過持有量、全形數字與千分位逗號也吃得下。
+	 *
+	 * 輸入框顯示的字串與 stake 分開存，使用者才能清空重打。
+	 */
+	let stakeText = $state('');
+	let stakeClamped = $state(false);
+
+	function typeStake(raw: string) {
+		const r = sanitizeStake(raw, balance);
+		stakeText = r.text;
+		stake = r.value;
+		stakeClamped = r.clamped;
+	}
+
+	/** 金額被籌碼按鈕或下注成功改動時，輸入框要跟著更新 */
+	$effect(() => {
+		const shown = stakeText === '' ? 0 : Number(stakeText);
+		if (shown !== stake) {
+			stakeText = stake === 0 ? '' : String(stake);
+			stakeClamped = false;
+		}
+	});
+
 
 	function newKey() {
 		idemKey = crypto.randomUUID();
@@ -544,9 +571,21 @@
 									</div>
 
 									<div class="stake">
-										<span class="n">{fmt(stake)}</span>
+										<input
+											class="n"
+											type="text"
+											inputmode="numeric"
+											placeholder="0"
+											aria-label="下注金額"
+											value={stakeText}
+											oninput={(e) => typeStake(e.currentTarget.value)}
+										/>
 										<span class="est">
-											{#if stake > 0}預估獲得 {fmt(estimate)}{:else}請選擇金額{/if}
+											{#if stake > 0}
+												預估獲得 {fmt(estimate)}{#if stakeClamped}・已是全部狗狗幣{/if}
+											{:else}
+												可直接輸入金額
+											{/if}
 										</span>
 									</div>
 
@@ -746,9 +785,21 @@
 								</div>
 
 								<div class="stake">
-									<span class="n">{fmt(stake)}</span>
+									<input
+										class="n"
+										type="text"
+										inputmode="numeric"
+										placeholder="0"
+										aria-label="下注金額"
+										value={stakeText}
+										oninput={(e) => typeStake(e.currentTarget.value)}
+									/>
 									<span class="est">
-										{#if stake > 0}預估獲得 {fmt(estimate)}{:else}請選擇金額{/if}
+										{#if stake > 0}
+											預估獲得 {fmt(estimate)}{#if stakeClamped}・已是全部狗狗幣{/if}
+										{:else}
+											可直接輸入金額
+										{/if}
 									</span>
 								</div>
 

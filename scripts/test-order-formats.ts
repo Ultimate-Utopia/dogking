@@ -149,13 +149,12 @@ const ecpayRow = (ref: string, status: string, shop: string, ship: string, total
 const SHOP = '終焉狗王大賽周邊';
 const ecpayRows = [
 	ECPAY_HEADER,
-	// 待出貨 + 信用卡：主辦方明確要求視為已付款
+	// 待出貨：不分付款方式都算可發放（主辦方 10-07 定案）
 	ecpayRow('11349648', '待出貨', SHOP, '65', '1415', '', '信用卡一次付清', 'K7M2QX'),
-	// 已出貨 + 信用卡：也早就付過了，同樣要發（主辦方原話只提「待出貨」）
+	ecpayRow('11288966', '待出貨', SHOP, '65', '765', '', '全家超商取貨付款', 'JDDTN4'),
+	// 已出貨：不自動發，但會列出來讓操作員決定
 	ecpayRow('11340296', '已出貨', SHOP, '65', '1265', '2026-09-22 10:00:00', '信用卡一次付清', '我的代碼 P4TR9N'),
-	// 超商取貨付款：這份報表看不出有沒有收到錢 —— 即使已出貨也不發
 	ecpayRow('11334582', '已出貨', SHOP, '65', '1215', '', '7-ELEVEN超商取貨付款', 'W2E3R4'),
-	ecpayRow('11288966', '待出貨', SHOP, '65', '765', '', '全家超商取貨付款', ''),
 	// 已取消：即使是信用卡也不發
 	ecpayRow('10846939', '已取消', SHOP, '65', '815', '', '信用卡一次付清', 'H8WQ3Z'),
 	// 運費 0
@@ -186,21 +185,29 @@ t('運費 0 或空白都當 0，不會算成 NaN', () => {
 	assert.equal(eBy('10829377').amountTwd, 500);
 });
 
-t('待出貨 + 信用卡 → 視為已付款，可以發', () => assert.equal(eBy('11349648').block, null));
-t('已出貨 + 信用卡 → 也可以發（出貨代表更晚的階段）', () => assert.equal(eBy('11340296').block, null));
-t('超商取貨付款 → 不發，即使已出貨', () => {
-	assert.equal(eBy('11334582').block, 'not-paid');
-	assert.equal(eBy('11288966').block, 'not-paid');
+t('待出貨 → 可以發，不分付款方式', () => {
+	assert.equal(eBy('11349648').block, null);
+	assert.equal(eBy('11288966').block, null);
+});
+t('已出貨 → 不自動發，標成「非待出貨」由人工決定', () => {
+	assert.equal(eBy('11340296').block, 'other-status');
+	assert.equal(eBy('11334582').block, 'other-status');
 });
 t('已取消 → 不發，即使是信用卡', () => assert.equal(eBy('10846939').block, 'cancelled'));
 
 t('狀態會寫出付款方式，操作員才知道為什麼不能發', () =>
 	assert.equal(eBy('11334582').statusText, '已出貨・7-ELEVEN超商取貨付款'));
 
+t('備註有寫東西但抓不出代碼時，原文要留著（前台才能顯示「填錯」）', () => {
+	const rows2 = [ECPAY_HEADER, ecpayRow('12000001', '待出貨', SHOP, '0', '500', '', '信用卡一次付清', '我的代碼是 abc-123')];
+	const [o] = parseEcpay(rows2, SHOP);
+	assert.equal(o.code, null);
+	assert.equal(o.rawCode, '我的代碼是 abc-123');
+});
+
 t('代碼從買家備註抓，夾在句子裡也抓得到', () => {
 	assert.equal(eBy('11349648').code, 'K7M2QX');
 	assert.equal(eBy('11340296').code, 'P4TR9N');
-	assert.equal(eBy('11288966').code, null);
 });
 
 t('列出檔案裡的賣場與筆數', () => {

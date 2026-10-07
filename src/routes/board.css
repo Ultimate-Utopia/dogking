@@ -426,6 +426,19 @@
 	font-size: 26px;
 	font-variant-numeric: tabular-nums;
 	font-weight: 700;
+	/* 可直接輸入金額：分完獎池會有零頭，籌碼按鈕湊不出來 */
+	flex: 1;
+	min-width: 90px;
+	width: 100%;
+	padding: 0;
+	border: none;
+	border-bottom: 2px solid var(--line);
+	background: transparent;
+	color: inherit;
+}
+.stake .n:focus-visible {
+	outline: none;
+	border-bottom-color: var(--blue);
 }
 .stake .est {
 	font-size: 13px;

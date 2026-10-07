@@ -134,6 +134,17 @@ await t('標題上方的空白列不影響（標題不一定在第 1 列）', as
 	assert.deepEqual(await readXlsx(file), [['標題'], ['1']]);
 });
 
+await t('數字型別的訂單編號不會變成科學記號', async () => {
+	// 綠界的訂單編號是數字欄位；位數一多 Excel 就會寫成 2.02609122258241E+16 這種格式
+	const file = zip({
+		...workbook('sheet1.xml'),
+		'xl/worksheets/sheet1.xml': `<worksheet><sheetData>
+			<row r="1"><c r="A1" t="n"><v>11349648</v></c><c r="B1" t="n"><v>1.1349648E+7</v></c><c r="C1" t="n"><v>1415</v></c><c r="D1" t="n"><v>65.5</v></c></row>
+		</sheetData></worksheet>`
+	});
+	assert.deepEqual(await readXlsx(file), [['11349648', '11349648', '1415', '65.5']]);
+});
+
 await t('不是 Excel 的檔案給看得懂的錯誤', async () => {
 	await assert.rejects(readXlsx(new TextEncoder().encode('訂單編號,金額\n1,2')), /不是有效的 Excel/);
 });

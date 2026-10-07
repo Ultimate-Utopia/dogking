@@ -13,7 +13,13 @@
 export const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 
 /** 為什麼這筆訂單不能發幣。null 代表可以（還要再看有沒有對到帳號）。 */
-export type OrderBlock = 'not-paid' | 'cancelled' | 'merged' | null;
+export type OrderBlock =
+	| 'not-paid'
+	/** 平台上的狀態不在「可發放」之列（綠界：非待出貨）。不是壞事，只是要人工決定 */
+	| 'other-status'
+	| 'cancelled'
+	| 'merged'
+	| null;
 
 export interface ParsedOrder {
 	orderRef: string;
@@ -279,22 +285,20 @@ function findEcpayDonationHeader(rows: string[][]): number {
 }
 
 /**
- * 這張訂單的錢收到了沒有。
+ * 這張訂單算不算「可以發幣」。
  *
- * 依主辦方 09-23 的說明：**信用卡就視為已付款**，不必等出貨。
- * 實測一份 102 筆的匯出檔：付款日期只有信用卡才會有值，
- * 超商取貨付款即使「已出貨」也是空的，發票與收據欄位也全空 ——
- * 也就是說，<b>這份報表看不出超商取貨付款有沒有收到錢</b>，只能靠信用卡判斷。
+ * 主辦方 10-07 定案：**訂單狀態為「待出貨」就發**，不分付款方式
+ * （先前一版限定信用卡，因為當時以為只有信用卡能確認收款）。
  *
- * 刻意不限定「待出貨」：主辦方原話是「待出貨＋信用卡視為已付款」，
- * 但同一份檔案裡有 9 筆「已出貨＋信用卡」—— 出貨代表更晚的階段，錢當然早就收了。
- * 只認待出貨的話，這些在兩次匯入之間出貨的訂單就永遠領不到狗狗幣。
+ * ⚠️ 其他狀態（已出貨、已完成…）不會自動發，但也不是錯誤 ——
+ * 這類訂單在預覽裡會標成「非待出貨」並附上「開兌換券」按鈕，由操作員決定。
+ * 刻意不自動發：萬一主辦方的流程是出貨後才算數，自動發就收不回來了。
+ * 反過來說，<u>訂單一旦出貨就不會再被自動發幣</u>，所以匯入要趁出貨前做。
  */
-function ecpayBlock(status: string, payment: string, paidAt: string): OrderBlock {
+function ecpayBlock(status: string): OrderBlock {
 	if (/取消|退款|退貨|失敗/.test(status)) return 'cancelled';
-	if (payment.includes('信用卡')) return null;
-	if (paidAt && paidAt !== '-') return null;
-	return 'not-paid';
+	if (status.includes('待出貨')) return null;
+	return 'other-status';
 }
 
 /** 匯出檔裡有哪些賣場、各幾筆。用來在濾不到訂單時告訴操作員檔案裡到底有什麼。 */
@@ -356,7 +360,7 @@ export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedO
 			totalTwd: total,
 			rawCode,
 			code: rawCode ? extractCode(rawCode) : null,
-			block: ecpayBlock(status, payment, cPaidAt >= 0 ? (r[cPaidAt] ?? '').trim() : ''),
+			block: ecpayBlock(status),
 			// 兩個都寫出來，操作員才看得懂為什麼這筆不能發
 			statusText: payment ? `${status}・${payment}` : status
 		});

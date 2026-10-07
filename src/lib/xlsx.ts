@@ -115,6 +115,25 @@ function attr(tag: string, name: string): string | null {
 	return m ? decodeXml(m[1]) : null;
 }
 
+/**
+ * 數字儲存格轉回「看得懂的數字字串」。
+ *
+ * 訂單編號在綠界的匯出檔裡是<b>數字型別</b>，不是文字。位數一多，Excel 會寫成
+ * 科學記號（例如 2.0260912225824138E+16），直接拿去當訂單編號就會對不上平台上的編號。
+ * 這裡把它還原成完整的整數字串。
+ *
+ * ⚠️ 超過 15 位的整數在 Excel 內部就已經是浮點數、精度早就掉了，誰都救不回來。
+ * 真的遇到那種編號，只能請對方改匯出成文字欄位。
+ */
+function plainNumber(raw: string): string {
+	const v = raw.trim();
+	if (!/^[-+]?\d*\.?\d+[eE][-+]?\d+$/.test(v)) return v;
+	const n = Number(v);
+	if (!Number.isFinite(n)) return v;
+	// 整數就不要留小數點，否則訂單編號會多一個「.0」
+	return Number.isInteger(n) ? BigInt(n).toString() : String(n);
+}
+
 /** "AB12" → 27（從 0 開始） */
 function columnIndex(ref: string): number {
 	const letters = /^[A-Z]+/.exec(ref)?.[0] ?? 'A';
@@ -188,7 +207,7 @@ export async function readXlsx(input: ArrayBuffer | Uint8Array): Promise<string[
 			let value = '';
 			if (type === 's') value = shared[Number(v)] ?? '';
 			else if (type === 'inlineStr') value = textOf(body);
-			else if (v !== undefined) value = decodeXml(v);
+			else if (v !== undefined) value = plainNumber(decodeXml(v));
 
 			while (cells.length < col) cells.push('');
 			cells[col] = value;
