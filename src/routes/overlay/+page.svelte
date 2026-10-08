@@ -93,7 +93,7 @@
 
 	const statusText = $derived.by(() => {
 		if (!active) return '準備中';
-		if (active.state === 'open') return secs !== null && secs <= 0 ? '已封盤' : '開放下注';
+		if (active.state === 'open') return secs !== null && secs <= 0 ? '已封盤' : '開放應援';
 		if (active.state === 'locked') return '已封盤';
 		if (active.state === 'settled') return '已開獎';
 		if (active.state === 'void') return '已取消';

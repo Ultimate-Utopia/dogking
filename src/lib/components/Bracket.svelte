@@ -190,7 +190,7 @@
 			>
 				<div class="node-top">
 					<span>M{n.orderNo}・{n.format}</span>
-					{#if n.hasOpenMarket}<span class="live-tag">下注中</span>{/if}
+					{#if n.hasOpenMarket}<span class="live-tag">應援中</span>{/if}
 				</div>
 				{#each ['blue', 'red'] as const as side (side)}
 					{@const name = side === 'blue' ? n.blueName : n.redName}

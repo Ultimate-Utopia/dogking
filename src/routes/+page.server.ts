@@ -56,18 +56,18 @@ export const actions: Actions = {
 		const amount = Number(form.get('amount'));
 		const idempotencyKey = String(form.get('idempotencyKey') ?? '');
 
-		if (side !== 'blue' && side !== 'red') return fail(400, { error: '請選擇要押哪一邊' });
-		if (!Number.isInteger(amount) || amount <= 0) return fail(400, { error: '下注金額無效' });
+		if (side !== 'blue' && side !== 'red') return fail(400, { error: '請選擇要應援哪一邊' });
+		if (!Number.isInteger(amount) || amount <= 0) return fail(400, { error: '應援金額無效' });
 		if (!idempotencyKey) return fail(400, { error: '請重新整理後再試一次' });
 
 		try {
 			await placeBet({ userId: locals.user.id, marketId, side, amount, idempotencyKey });
-			return { success: `已押注 ${amount.toLocaleString('zh-TW')} 狗狗幣` };
+			return { success: `已應援 ${amount.toLocaleString('zh-TW')} 狗狗幣` };
 		} catch (e) {
 			if (e instanceof InsufficientBalanceError) {
 				return fail(400, { error: `狗狗幣不足，你目前只有 ${e.balance.toLocaleString('zh-TW')}` });
 			}
-			return fail(400, { error: e instanceof Error ? e.message : '下注失敗，請再試一次' });
+			return fail(400, { error: e instanceof Error ? e.message : '應援失敗，請再試一次' });
 		}
 	}
 };

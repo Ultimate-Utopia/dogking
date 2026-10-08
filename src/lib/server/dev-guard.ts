@@ -46,7 +46,7 @@ export function requireLocalDev(): void {
 		error(
 			403,
 			`開發端點已封鎖：目前的 DATABASE_URL 指向 ${databaseHost()}，不是本機資料庫。\n\n` +
-				'這些端點會建立或刪除資料（/dev/demo?reset=1 會清空所有下注與盤口），' +
+				'這些端點會建立或刪除資料（/dev/demo?reset=1 會清空所有應援與盤口），' +
 				'因此只允許在連到本機資料庫時執行。\n\n' +
 				'若你剛才是為了對正式站跑 migration 才改的，請把 .env 的 DATABASE_URL 切回 ' +
 				'postgres://dogking:dogking@localhost:5433/dogking 再重啟開發伺服器。'

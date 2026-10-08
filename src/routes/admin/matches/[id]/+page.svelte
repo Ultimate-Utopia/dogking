@@ -58,7 +58,7 @@
 
 	const STATE_LABEL: Record<string, string> = {
 		pending: '未建立',
-		open: '開放下注',
+		open: '開放應援',
 		locked: '已封盤',
 		settled: '已結算',
 		void: '已取消'
@@ -114,13 +114,13 @@
 		</p>
 
 		{#if p.rows.length === 0}
-			<p class="warn">這個盤口沒有任何下注，結算後不會有任何金額變動。</p>
+			<p class="warn">這個盤口沒有任何應援，結算後不會有任何金額變動。</p>
 		{:else}
 			<table>
 				<thead>
 					<tr>
 						<th>觀眾</th>
-						<th>押注</th>
+						<th>應援</th>
 						<th style="text-align:right">金額</th>
 						<th style="text-align:right">領回</th>
 						<th>結果</th>
@@ -280,7 +280,7 @@
 				{@const total = m.poolBlue + m.poolRed}
 				<div class="pools">
 					{#if total === 0}
-						<div class="pool-empty">尚無下注</div>
+						<div class="pool-empty">尚無應援</div>
 					{:else}
 						{#if m.poolBlue > 0}
 							<div class="pool-b" style="flex:{m.poolBlue}">{fmt(m.poolBlue)}</div>
@@ -344,7 +344,7 @@
 <h2>刪除場次</h2>
 <div class="panel">
 	<p class="hint" style="margin:0 0 12px">
-		只有在還沒有人下注時才能刪除。已經有注單的場次請改用盤口的「取消並退款」。
+		只有在還沒有人應援時才能刪除。已經有注單的場次請改用盤口的「取消並退款」。
 	</p>
 	<form method="POST" action="?/deleteMatch">
 		<button class="b b-quiet" style="flex:0;color:var(--red);border-color:var(--red)" type="submit">

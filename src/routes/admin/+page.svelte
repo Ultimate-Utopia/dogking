@@ -32,7 +32,7 @@
 <div class="panel">
 	<p class="hint" style="margin:0 0 12px">
 		<strong>活動開始前按一次「開放全部場次」。</strong>
-		這次的玩法是所有場次一開場就能下注（連還沒確定對手的也能押），
+		這次的玩法是所有場次一開場就能應援（連還沒確定對手的也能押），
 		主持人在每場開打前約一分鐘進去那一場按「封盤」或設 60 秒倒數。
 		<u>已經封盤或已派彩的場次不會被重新打開。</u>
 	</p>
@@ -40,7 +40,7 @@
 		method="POST"
 		action="?/openAll"
 		use:enhance={({ cancel }) => {
-			if (!confirm('要開放所有尚未開盤場次的整場盤嗎？開放後觀眾就能開始下注。')) cancel();
+			if (!confirm('要開放所有尚未開盤場次的整場盤嗎？開放後觀眾就能開始應援。')) cancel();
 		}}
 	>
 		<button class="b b-go" style="flex:0" type="submit">開放全部場次的整場盤</button>
@@ -73,7 +73,7 @@
 			</div>
 			<div style="display:flex;gap:6px;align-items:center">
 				{#if m.openCount > 0}
-					<span class="tag t-open">開放下注 {m.openCount}</span>
+					<span class="tag t-open">開放應援 {m.openCount}</span>
 				{:else if m.lockedCount > 0}
 					<span class="tag t-locked">待結算 {m.lockedCount}</span>
 				{:else}

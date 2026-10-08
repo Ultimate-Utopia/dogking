@@ -190,7 +190,7 @@ export async function placeBet(input: PlaceBetInput) {
 	const { userId, marketId, side, amount, idempotencyKey } = input;
 
 	if (!Number.isInteger(amount) || amount <= 0) {
-		throw new MarketStateError('下注金額必須是正整數');
+		throw new MarketStateError('應援金額必須是正整數');
 	}
 
 	// 冪等：同一個鍵已經成立過就直接回傳，不重複扣款
@@ -232,7 +232,7 @@ export async function placeBet(input: PlaceBetInput) {
 			amount: -amount,
 			refMarketId: marketId,
 			refBetId: bet.id,
-			note: `下注 ${side === 'blue' ? '藍方' : '紅方'}`
+			note: `應援 ${side === 'blue' ? '藍方' : '紅方'}`
 		});
 
 		await tx
@@ -291,7 +291,7 @@ export async function settleMarket(marketId: number, winnerSide: Side): Promise<
 		const winnerPool = winnerSide === 'blue' ? market.poolBlue : market.poolRed;
 
 		if (winnerPool === 0) {
-			const refund = await refundAll(tx, marketId, '贏方無人下注，全額退款');
+			const refund = await refundAll(tx, marketId, '贏方無人應援，全額退款');
 			await tx
 				.update(markets)
 				.set({ state: 'void', winnerSide, settledAt: new Date() })
@@ -308,7 +308,7 @@ export async function settleMarket(marketId: number, winnerSide: Side): Promise<
 				betsWon: 0,
 				betsLost: 0,
 				betsRefunded: refund.count,
-				note: '贏方無人下注，全額退款'
+				note: '贏方無人應援，全額退款'
 			};
 		}
 
@@ -502,7 +502,7 @@ export async function previewSettle(marketId: number, winnerSide: Side): Promise
 		totalPool,
 		winnerPool,
 		willRefund,
-		reason: willRefund ? '贏方無人下注，將全額退款' : undefined,
+		reason: willRefund ? '贏方無人應援，將全額退款' : undefined,
 		totalPayout,
 		remainder: willRefund ? 0 : totalPool - totalPayout,
 		rows: detailed
@@ -591,7 +591,7 @@ export async function deleteMatch(matchId: number) {
 			.limit(1);
 
 		if (placed) {
-			throw new MarketStateError('這個場次已經有人下注，不能刪除。請改用「取消並退款」。');
+			throw new MarketStateError('這個場次已經有人應援，不能刪除。請改用「取消並退款」。');
 		}
 
 		await db.delete(markets).where(eq(markets.matchId, matchId));

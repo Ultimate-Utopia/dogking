@@ -19,7 +19,7 @@
 	/**
 	 * 輪詢結果先放進 polled*，畫面再用 $derived 取「輪詢值 ?? SSR 值」。
 	 *
-	 * 不直接把 data 複製進 $state：那樣一旦 data 更新（例如下注成功後
+	 * 不直接把 data 複製進 $state：那樣一旦 data 更新（例如應援成功後
 	 * SvelteKit 重跑 load），本地狀態不會跟著動，畫面就會停在舊資料。
 	 */
 	let polledBoard = $state<typeof data.board | null>(null);
@@ -81,7 +81,7 @@
 	 * 倒數歸零就立刻當成封盤，不等伺服器狀態同步。
 	 *
 	 * /api/board 有 3 秒快取，狀態改成 locked 之後畫面最多還會慢 3 秒。
-	 * 那段空窗期若還顯示下注介面，使用者按下去只會拿到失敗訊息。
+	 * 那段空窗期若還顯示應援介面，使用者按下去只會拿到失敗訊息。
 	 */
 	function isOpen(m: (typeof board.markets)[number]) {
 		if (m.state !== 'open') return false;
@@ -132,10 +132,10 @@
 		return null;
 	});
 
-	/** 展開下注面板的那一列（場次 id）。一次只展開一列，版面才不會爆開。 */
+	/** 展開應援面板的那一列（場次 id）。一次只展開一列，版面才不會爆開。 */
 	let openBar = $state<number | null>(null);
 
-	/** 這一列現在能不能下注 */
+	/** 這一列現在能不能應援 */
 	function barOpen(bar: (typeof board.bars)[number]) {
 		return !!bar.market && isOpen(bar.market);
 	}
@@ -227,7 +227,7 @@
 		stakeClamped = r.clamped;
 	}
 
-	/** 金額被籌碼按鈕或下注成功改動時，輸入框要跟著更新 */
+	/** 金額被籌碼按鈕或應援成功改動時，輸入框要跟著更新 */
 	$effect(() => {
 		const shown = stakeText === '' ? 0 : Number(stakeText);
 		if (shown !== stake) {
@@ -264,8 +264,8 @@
 	 * Function —— 不像看板那樣所有人共用一份 CDN 快取。若每 3 秒問一次，
 	 * 300 人的活動就是 180 萬次呼叫，而 Netlify 免費額度是 12.5 萬次／月。
 	 *
-	 * 餘額只有三種情況會變：開啟頁面、自己下注、盤口派彩。
-	 * 事件驅動不但省下 99% 的呼叫，反應還更快（下注完立刻更新，不用等輪詢）。
+	 * 餘額只有三種情況會變：開啟頁面、自己應援、盤口派彩。
+	 * 事件驅動不但省下 99% 的呼叫，反應還更快（應援完立刻更新，不用等輪詢）。
 	 */
 	async function refreshMe() {
 		try {
@@ -402,7 +402,7 @@
 	{#if meLoaded && !user}
 		<div class="card2" style="margin-bottom:16px">
 			<h2>還沒加入？</h2>
-			<p style="margin:0 0 6px">用 Discord 登入即可領取 1,000 狗狗幣，馬上開始下注。</p>
+			<p style="margin:0 0 6px">用 Discord 登入即可領取 1,000 狗狗幣，馬上開始應援。</p>
 			<p style="margin:0;font-size:12.5px;color:var(--muted)">
 				僅索取 identify 權限，不會取得你的 email 或任何聯絡方式。
 			</p>
@@ -420,7 +420,7 @@
 				</div>
 				<div>
 					{#if openMarkets.length > 0}
-						<span class="tag t-open" style="color:var(--ok);border:1px solid var(--ok)">開放下注</span>
+						<span class="tag t-open" style="color:var(--ok);border:1px solid var(--ok)">開放應援</span>
 					{:else if board.markets.some((m) => m.state === 'locked')}
 						<span class="tag" style="color:var(--red);border:1px solid var(--red)">已封盤・結算中</span>
 					{:else}
@@ -448,7 +448,7 @@
 			</div>
 		</div>
 
-		<!-- ── 盤口與下注 ─────────────────────────────── -->
+		<!-- ── 盤口與應援 ─────────────────────────────── -->
 		<div class="markets">
 			{#each board.markets as m (m.id)}
 				{@const secs = remaining(m.lockAt)}
@@ -459,7 +459,7 @@
 						{#if isOpen(m) && secs !== null && secs > 0}
 							<span class="countdown">{mmss(secs)} 後封盤</span>
 						{:else if isOpen(m)}
-							<span style="color:var(--ok);font-size:13px">開放下注中</span>
+							<span style="color:var(--ok);font-size:13px">開放應援中</span>
 						{:else if m.state === 'locked' || (m.state === 'open' && secs === 0)}
 							<span style="color:var(--red);font-size:13px">已封盤</span>
 						{:else if m.state === 'settled'}
@@ -484,7 +484,7 @@
 
 					<div class="split">
 						{#if m.total === 0}
-							<div class="none">尚無人下注</div>
+							<div class="none">尚無人應援</div>
 						{:else}
 							{#if m.poolBlue > 0}<div class="sb" style="flex:{m.poolBlue}">{fmt(m.poolBlue)}</div>{/if}
 							{#if m.poolRed > 0}<div class="sr" style="flex:{m.poolRed}">{fmt(m.poolRed)}</div>{/if}
@@ -500,7 +500,7 @@
 						{@const mine = myPositions(m.id)}
 						{#if mine.length > 0}
 							<div class="mine">
-								<div class="mine-t">你的押注</div>
+								<div class="mine-t">你的應援</div>
 								{#each mine as p (p.side)}
 									{@const nm = p.side === 'blue' ? c.blueName : c.redName}
 									<div class="mine-row">
@@ -522,7 +522,7 @@
 									</div>
 								{/each}
 								{#if m.state === 'open'}
-									<p class="mine-note">預估值會隨其他人下注而變動，最終依封盤後的彩池計算。</p>
+									<p class="mine-note">預估值會隨其他人應援而變動，最終依封盤後的彩池計算。</p>
 								{/if}
 							</div>
 						{/if}
@@ -531,7 +531,7 @@
 					{#if isOpen(m)}
 						<div class="betbox">
 							{#if meLoaded && !user}
-								<p class="closed-note">登入後即可下注</p>
+								<p class="closed-note">登入後即可應援</p>
 							{:else}
 								{@const held = myPositions(m.id)}
 								<div class="sides">
@@ -577,7 +577,7 @@
 											type="text"
 											inputmode="numeric"
 											placeholder="0"
-											aria-label="下注金額"
+											aria-label="應援金額"
 											value={stakeText}
 											oninput={(e) => typeStake(e.currentTarget.value)}
 										/>
@@ -591,7 +591,7 @@
 									</div>
 
 									<button class="submit" disabled={!canBet} onclick={() => (confirming = true)}>
-										送出下注
+										送出應援
 									</button>
 								{/if}
 							{/if}
@@ -654,13 +654,13 @@
 		</div>
 	{/if}
 
-	<!-- ── 所有場次：提前下注 ──────────────────────── -->
+	<!-- ── 所有場次：提前應援 ──────────────────────── -->
 	{#if board.bars.length}
 		<div class="card2" style="margin-bottom:16px">
-			<h2>所有場次・提前下注</h2>
+			<h2>所有場次・提前應援</h2>
 			<p class="bars-note">
 				每一場都可以提前押，<strong>連還沒確定對手的場次也可以</strong> ——
-				押的是那一側，例如「M1 勝者」。主持人會在每場開打前約一分鐘收盤，收盤後就不能再下注。
+				押的是那一側，例如「M1 勝者」。主持人會在每場開打前約一分鐘收盤，收盤後就不能再應援。
 			</p>
 
 			<div class="bars-grid">
@@ -682,7 +682,7 @@
 						{#if canPick && left !== null}
 							<span class="cd">{mmss(left)}</span>
 						{:else if canPick}
-							<span class="tag t-open">開放下注</span>
+							<span class="tag t-open">開放應援</span>
 						{:else if mk?.state === 'settled'}
 							<span class="tag t-settled">已派彩</span>
 						{:else if mk?.state === 'void'}
@@ -709,7 +709,7 @@
 					{#if mk}
 						<div class="split">
 							{#if mk.total === 0}
-								<div class="none">尚無人下注</div>
+								<div class="none">尚無人應援</div>
 							{:else}
 								{#if mk.poolBlue > 0}<div class="sb" style="flex:{mk.poolBlue}">{fmt(mk.poolBlue)}</div>{/if}
 								{#if mk.poolRed > 0}<div class="sr" style="flex:{mk.poolRed}">{fmt(mk.poolRed)}</div>{/if}
@@ -726,7 +726,7 @@
 						{@const mine = myPositions(mk.id)}
 						{#if mine.length}
 							<div class="bar-mine">
-								你已押
+								你已應援
 								{#each mine as p, i (p.side)}
 									{i > 0 ? '、' : ''}<span class={p.side}>
 										{(p.side === 'blue' ? bar.blueName ?? bar.blueFrom : bar.redName ?? bar.redFrom) ??
@@ -740,7 +740,7 @@
 
 					{#if canPick}
 						{#if meLoaded && !user}
-							<a class="bar-bet" href="/auth/login" data-sveltekit-reload>登入後下注</a>
+							<a class="bar-bet" href="/auth/login" data-sveltekit-reload>登入後應援</a>
 						{:else}
 							<button
 								class="bar-bet"
@@ -749,19 +749,19 @@
 									if (!expanded) pickedMarket = mk!.id;
 								}}
 							>
-								{expanded ? '收合' : '下注'}
+								{expanded ? '收合' : '應援'}
 							</button>
 						{/if}
 					{:else}
 						<!--
-							不能下注時也佔住按鈕的位置：同一排的卡片底部才會對齊，
+							不能應援時也佔住按鈕的位置：同一排的卡片底部才會對齊，
 							觀眾也看得到「為什麼不能押」，而不是按鈕憑空消失。
 						-->
 						<div class="bar-bet off">
-							{#if mk?.state === 'void'}已取消，押注已全數退還
+							{#if mk?.state === 'void'}已取消，應援金額已全數退還
 							{:else if mk?.state === 'settled'}已派彩
 							{:else if mk}已封盤，等待賽果
-							{:else}尚未開放下注{/if}
+							{:else}尚未開放應援{/if}
 						</div>
 					{/if}
 
@@ -802,7 +802,7 @@
 										type="text"
 										inputmode="numeric"
 										placeholder="0"
-										aria-label="下注金額"
+										aria-label="應援金額"
 										value={stakeText}
 										oninput={(e) => typeStake(e.currentTarget.value)}
 									/>
@@ -816,7 +816,7 @@
 								</div>
 
 								<button class="submit" disabled={!canBet} onclick={() => (confirming = true)}>
-									送出下注
+									送出應援
 								</button>
 							{/if}
 						</div>
@@ -853,7 +853,7 @@
 		</div>
 
 		<div class="card2">
-			<h2>我的下注紀錄</h2>
+			<h2>我的應援紀錄</h2>
 			{#if meLoaded && !user}
 				<p style="margin:0;color:var(--muted)">登入後顯示。</p>
 			{:else}
@@ -877,7 +877,7 @@
 						</div>
 					</div>
 				{:else}
-					<p style="margin:0;color:var(--muted)">還沒有下注紀錄。</p>
+					<p style="margin:0;color:var(--muted)">還沒有應援紀錄。</p>
 				{/each}
 				<p style="margin:12px 0 0;font-size:12px">
 					<a href="/coins">看完整的狗狗幣紀錄 →</a>
@@ -934,7 +934,7 @@
 		<strong>本平台的狗狗幣無實際金錢價值，僅供娛樂用途。</strong>
 		不可轉讓、不可兌換現金，活動結束後全數回收。<br />
 		賠率為彩池分配制：你的獎金 = 總彩池 × 你的注 ÷ 贏方總注，除不盡採無條件捨去。<br />
-		封盤前賠率會隨下注變動，畫面顯示為預估值，最終依封盤後的彩池計算。<br />
+		封盤前賠率會隨應援變動，畫面顯示為預估值，最終依封盤後的彩池計算。<br />
 		平局、比賽取消或選手退賽時，該盤口全額退款。
 	</div>
 </div>
@@ -944,16 +944,16 @@
 	{@const nm = pickedSide === 'blue' ? activeTarget.blueName : activeTarget.redName}
 	<div class="backdrop">
 		<!-- 點背景關閉。用 button 而非在 div 上掛 onclick，鍵盤才能操作 -->
-		<button class="backdrop-close" aria-label="關閉下注確認" onclick={() => (confirming = false)}
+		<button class="backdrop-close" aria-label="關閉應援確認" onclick={() => (confirming = false)}
 		></button>
 		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" tabindex="-1">
-			<h3 id="confirm-title">確認下注</h3>
+			<h3 id="confirm-title">確認應援</h3>
 			<dl>
 				<dt>場次</dt>
 				<dd>{activeTarget.title}</dd>
 				<dt>盤口</dt>
 				<dd>{activeMarket.label}</dd>
-				<dt>押注</dt>
+				<dt>應援</dt>
 				<dd style="color:{pickedSide === 'blue' ? 'var(--blue)' : 'var(--red)'}">{nm}</dd>
 				<dt>金額</dt>
 				<dd>{fmt(stake)}</dd>
@@ -961,7 +961,7 @@
 				<dd>{fmt(estimate)}</dd>
 			</dl>
 			<p class="fine">
-				下注後<strong>無法取消或更改</strong>。預估獲得會隨其他人下注而變動，最終金額依封盤後的彩池計算。
+				應援後<strong>無法取消或更改</strong>。預估獲得會隨其他人應援而變動，最終金額依封盤後的彩池計算。
 			</p>
 			<form method="POST" action="?/bet" use:enhance class="modal-actions">
 				<input type="hidden" name="marketId" value={activeMarket.id} />
@@ -969,7 +969,7 @@
 				<input type="hidden" name="amount" value={stake} />
 				<input type="hidden" name="idempotencyKey" value={idemKey} />
 				<button type="button" class="no" onclick={() => (confirming = false)}>再想想</button>
-				<button type="submit" class="yes">確認下注</button>
+				<button type="submit" class="yes">確認應援</button>
 			</form>
 		</div>
 	</div>

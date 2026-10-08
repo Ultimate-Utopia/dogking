@@ -154,7 +154,7 @@ export const actions: Actions = {
 		try {
 			const market = await openMarket(Number(params.id), gameNo);
 			await logAdmin(admin.id, '開盤', `盤口 ${market.id}`, { matchId: params.id, gameNo });
-			return { success: gameNo === 0 ? '整場盤已開放下注' : `第 ${gameNo} 局盤已開放下注` };
+			return { success: gameNo === 0 ? '整場盤已開放應援' : `第 ${gameNo} 局盤已開放應援` };
 		} catch (e) {
 			return toFail(e);
 		}
@@ -168,7 +168,7 @@ export const actions: Actions = {
 		try {
 			await lockMarket(marketId);
 			await logAdmin(admin.id, '封盤', `盤口 ${marketId}`);
-			return { success: '已封盤，不再接受下注' };
+			return { success: '已封盤，不再接受應援' };
 		} catch (e) {
 			return toFail(e);
 		}
