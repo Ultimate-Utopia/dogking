@@ -1,0 +1,76 @@
+/**
+ * 派彩計算的測試 —— 特別是大數字下的精確度。不需要資料庫。
+ *
+ *   node scripts/test-payout.ts
+ *
+ * 為什麼需要：amount × poolTotal 這個中間值很容易超過 JavaScript 的安全整數上限，
+ * 超過之後結果會差個一兩塊。這次活動 NT$1 = 100 狗狗幣，很容易到那個量級。
+ */
+import assert from 'node:assert/strict';
+import { calcPayout, calcOdds } from '../src/lib/payout.ts';
+
+let passed = 0;
+const t = (name: string, fn: () => void) => {
+	fn();
+	passed++;
+	console.log('  ✓', name);
+};
+
+console.log('派彩計算');
+
+t('一般情況：押中的人依比例分整個彩池', () => {
+	// 自己押 100，獲勝方共 400，總池 1000 → 100/400 × 1000 = 250
+	assert.equal(calcPayout(100, 400, 1000), 250);
+});
+
+t('無條件捨去，餘數留在系統', () => {
+	// 100/300 × 1000 = 333.33…
+	assert.equal(calcPayout(100, 300, 1000), 333);
+});
+
+t('獲勝方只有自己 → 整個彩池拿回', () => assert.equal(calcPayout(500, 500, 1800), 1800));
+
+t('獲勝方彩池為 0 → 不分配', () => assert.equal(calcPayout(100, 0, 1000), 0));
+
+t('沒有人押另一邊 → 原額拿回，不賺不賠', () => assert.equal(calcPayout(700, 700, 700), 700));
+
+console.log('大數字');
+
+t('獲勝方只有一人、彩池上億也要整個拿回（浮點數會少 1）', () => {
+	// 這三組是實際找出來、用浮點數會算錯的case
+	assert.equal(calcPayout(939_109_593, 939_109_593, 1_391_788_482), 1_391_788_482);
+	assert.equal(calcPayout(884_823_019, 884_823_019, 1_797_218_238), 1_797_218_238);
+	assert.equal(calcPayout(374_795_569, 374_795_569, 530_117_868), 530_117_868);
+});
+
+t('與精確計算逐筆相符（隨機 5 萬組，彩池量級到十億）', () => {
+	const exact = (a: number, w: number, tot: number) => Number((BigInt(a) * BigInt(tot)) / BigInt(w));
+	for (let i = 0; i < 50_000; i++) {
+		const w = Math.floor(Math.random() * 1e9) + 1;
+		const lose = Math.floor(Math.random() * 1e9);
+		const a = Math.floor(Math.random() * w) + 1;
+		assert.equal(calcPayout(a, w, w + lose), exact(a, w, w + lose));
+	}
+});
+
+t('派出去的總額不會超過彩池', () => {
+	// 三個人押同一邊，分完的總和必須 ≤ 總彩池
+	const bets = [333_333_333, 111_111_111, 555_555_555];
+	const w = bets.reduce((a, b) => a + b, 0);
+	const tot = w + 987_654_321;
+	const paid = bets.reduce((sum, b) => sum + calcPayout(b, w, tot), 0);
+	assert.ok(paid <= tot, `派出 ${paid} 超過彩池 ${tot}`);
+	// 捨去造成的餘數不該大於人數
+	assert.ok(tot - paid < bets.length, `餘數 ${tot - paid} 太大`);
+});
+
+console.log('賠率顯示');
+
+t('某一邊沒人押時不顯示賠率', () => {
+	const odds = calcOdds(0, 500);
+	assert.equal(odds.blue, null);
+	assert.equal(odds.red, 1);
+	assert.equal(odds.total, 500);
+});
+
+console.log(`\n${passed} 項全部通過`);

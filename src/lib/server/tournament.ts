@@ -16,6 +16,10 @@ import { eq, and, inArray, asc, lte } from 'drizzle-orm';
 import { db } from './db';
 import { markets, bets, matches, users, participants } from './db/schema';
 import { lockUser, writeLedger } from './ledger';
+import { calcOdds, calcPayout } from '../payout';
+
+// 彩池計算搬到 $lib/payout.ts（純函式、可不連資料庫測試），這裡照舊匯出給既有呼叫端
+export { calcOdds, calcPayout };
 import type { Side } from './db/schema';
 
 type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -32,31 +36,6 @@ export class MarketStateError extends Error {
 		super(message);
 		this.name = 'MarketStateError';
 	}
-}
-
-// ─────────────────────────────────────────────────────────
-// 賠率
-// ─────────────────────────────────────────────────────────
-
-/**
- * 彩池分配制賠率：總彩池 ÷ 該方彩池。
- *
- * 某方彩池為 0 時賠率無意義（沒有人押就沒有人能領），回傳 null。
- * 前台顯示時應標示「預估賠率，最終依封盤後彩池計算」。
- */
-export function calcOdds(poolBlue: number, poolRed: number) {
-	const total = poolBlue + poolRed;
-	return {
-		blue: poolBlue > 0 ? total / poolBlue : null,
-		red: poolRed > 0 ? total / poolRed : null,
-		total
-	};
-}
-
-/** 單筆下注在指定彩池下的派彩金額。無條件捨去，餘數留在系統。 */
-export function calcPayout(amount: number, poolWinner: number, poolTotal: number): number {
-	if (poolWinner <= 0) return 0;
-	return Math.floor((amount * poolTotal) / poolWinner);
 }
 
 // ─────────────────────────────────────────────────────────
