@@ -10,8 +10,8 @@ export const load: PageServerLoad = async () => {
 
 export const actions: Actions = {
 	/**
-	 * 一次開放所有場次的整場盤。活動開始前按一次即可。
-	 * 已經封盤或已結算的場次不會被重新打開（見 openAllMatchMarkets）。
+	 * 一次開放所有場次的整場應援。活動開始前按一次即可。
+	 * 已經關閉應援或已結算的場次不會被重新打開（見 openAllMatchMarkets）。
 	 */
 	openAll: async ({ locals }) => {
 		const admin = requireAdmin(locals.user);

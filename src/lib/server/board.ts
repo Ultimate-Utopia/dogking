@@ -4,7 +4,7 @@
  * ─────────────────────────────────────────────────────────
  * 這裡的資料「對所有人都一樣」，因此可以被 CDN 快取。
  *
- * ⚠️ 絕對不要把使用者餘額、個人下注紀錄放進來。
+ * ⚠️ 絕對不要把使用者餘額、個人應援紀錄放進來。
  * 這份回應會被 CDN 快取後送給所有人，混進個人資料
  * 就等於把甲的餘額送給乙。個人資料一律走 /api/me（不快取）。
  * ─────────────────────────────────────────────────────────
@@ -33,8 +33,8 @@ export interface BoardMarket {
 /**
  * 前台「所有場次」列表的一列。
  *
- * 這次的玩法是所有場次一開場就開放下注，連還沒確定對手的場次也能押，
- * 所以每一列都要能自己交代「你押的是誰」—— 對手未定時顯示晉級來源（M1 勝者）。
+ * 這次的玩法是所有場次一開場就開放應援，連還沒確定對手的場次也能應援，
+ * 所以每一列都要能自己交代「你應援的是誰」—— 對手未定時顯示晉級來源（M1 勝者）。
  */
 export interface BoardBar {
 	matchId: number;
@@ -51,7 +51,7 @@ export interface BoardBar {
 	/** 對手未定時的說明文字，例如「M1 勝者」；種子位為 null */
 	blueFrom: string | null;
 	redFrom: string | null;
-	/** 整場盤。還沒開盤時為 null。 */
+	/** 整場應援。還沒開放應援時為 null。 */
 	market: BoardMarket | null;
 }
 
@@ -122,16 +122,16 @@ function toBoardMatch(
  *
  * ⚠️ 這裡刻意「一次抓完再用記憶體算」，不要改回逐項查詢。
  *
- * 原本的寫法有 9 次序列查詢（挑當前場次、抓盤口、抓參賽者名字、
+ * 原本的寫法有 9 次序列查詢（挑當前場次、抓應援場、抓參賽者名字、
  * 找上一場、找下一場、再各抓一次名字…）。本機對著 Docker 跑
  * 每次往返不到 1ms，完全看不出問題；但正式站的 Function 在 us-east-1、
  * 資料庫在別的洲，每次往返 200ms 以上，9 次就是 2 秒起跳，首頁直接超時。
  *
- * 全部資料量都很小（13 場次、數十個盤口、12 位成員），
+ * 全部資料量都很小（13 場次、數十個應援場、12 位成員），
  * 一次抓回來在記憶體裡挑，比精準查詢快得多。
  */
 export async function getBoardState() {
-	// 先把倒數到期的盤口改成 locked，否則前台會繼續顯示下注介面
+	// 先把倒數到期的應援場改成 locked，否則前台會繼續顯示應援介面
 	await expireLocks();
 
 	const [allMatches, allMarkets, allPeople] = await Promise.all([
@@ -151,7 +151,7 @@ export async function getBoardState() {
 		};
 	}
 
-	// 當前場次：優先有開放中的盤口，其次待結算，再其次下一個未完成的
+	// 當前場次：優先有開放中的應援場，其次待結算，再其次下一個未完成的
 	const hasState = (matchId: number, state: string) =>
 		allMarkets.some((mk) => mk.matchId === matchId && mk.state === state);
 
@@ -181,7 +181,7 @@ export async function getBoardState() {
 			};
 		});
 
-	/** 所有場次的整場盤，給前台的提前下注列表 */
+	/** 所有場次的整場應援，給前台的提前應援列表 */
 	const bars: BoardBar[] = allMatches
 		.filter((m) => m.state !== 'void')
 		.map((m) => {
@@ -245,7 +245,7 @@ export async function getBoardState() {
 }
 
 /**
- * 籌碼排行榜。
+ * 狗狗幣排行榜。
  *
  * 每次都要把整張帳本加總，比看板貴得多，所以快取時間拉長到 60 秒
  * （企劃書的 DEMO 圖也寫「每分鐘更新一次」）。
@@ -281,7 +281,7 @@ export interface BracketNode {
 	scoreBlue: number;
 	scoreRed: number;
 	winnerSide: string | null;
-	/** 這一場有沒有正在開放的盤口，前台用來標「可下注」 */
+	/** 這一場有沒有正在開放的應援場，前台用來標「可應援」 */
 	hasOpenMarket: boolean;
 	/** 畫在第幾欄＝輪次。見 layoutBracket。 */
 	col: number;
@@ -464,7 +464,7 @@ export async function getRoster() {
 	};
 }
 
-/** 使用者在指定盤口上已下的注，用於前台顯示「你已押 X」。 */
+/** 使用者在指定應援場上已下的注，用於前台顯示「你已應援 X」。 */
 export async function getMyBets(userId: string, limit = 30) {
 	const rows = await db
 		.select({

@@ -1,12 +1,12 @@
 /**
  * 一鍵準備測試場景 —— 僅開發模式可用。
  *
- * 手動測試時每次都要「設對戰 → 開盤 → 找人下注」很麻煩，
- * 而且只有一個帳號的話彩池是自己對自己，賠率看不出變化。
+ * 手動測試時每次都要「設對戰 → 開放應援 → 找人應援」很麻煩，
+ * 而且只有一個帳號的話獎池是自己對自己，分配倍率看不出變化。
  * 這裡用示範帳號製造有對手的盤面。
  *
  *   /dev/demo          建立場景
- *   /dev/demo?reset=1  清空所有下注與盤口，回到乾淨狀態
+ *   /dev/demo?reset=1  清空所有應援與應援場，回到乾淨狀態
  *
  * 練習賽直播的彩排也可以用這個先跑一遍。
  */
@@ -55,7 +55,7 @@ async function reset() {
 		winnerSide: null
 	});
 
-	return { reset: true, note: '所有盤口與下注已清除，帳本只留註冊贈送與人工調整' };
+	return { reset: true, note: '所有應援場與應援已清除，帳本只留註冊贈送與人工調整' };
 }
 
 async function ensureDemoUser(key: string, name: string, funds: number) {
@@ -103,7 +103,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		demoIds.push(await ensureDemoUser(a.key, a.name, a.funds));
 	}
 
-	// 整場盤：兩邊都有錢，賠率才有得看
+	// 整場應援：兩邊都有錢，分配倍率才有得看
 	const main = await openMarket(match.id, 0);
 	await placeBet({ userId: demoIds[0], marketId: main.id, side: 'blue', amount: 8000, idempotencyKey: crypto.randomUUID() });
 	await placeBet({ userId: demoIds[1], marketId: main.id, side: 'red', amount: 5000, idempotencyKey: crypto.randomUUID() });
@@ -136,9 +136,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	return json({
 		ok: true,
 		對戰: `${all[0].name}（藍） vs ${all[1].name}（紅）`,
-		整場盤: '已開放，彩池 藍 8,000 / 紅 8,000',
-		第一局盤: '已開放，彩池 藍 1,500 / 紅 2,000，180 秒後封盤',
+		整場應援: '已開放，獎池 藍 8,000 / 紅 8,000',
+		第一局應援: '已開放，獎池 藍 1,500 / 紅 2,000，180 秒後關閉應援',
 		你的餘額: yourBalance ?? '（未登入）',
-		下一步: '回首頁即可下注。清空請用 /dev/demo?reset=1'
+		下一步: '回首頁即可應援。清空請用 /dev/demo?reset=1'
 	});
 };

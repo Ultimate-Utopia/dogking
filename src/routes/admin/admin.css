@@ -106,7 +106,7 @@
 	margin-top: 2px;
 }
 
-/* ── 盤口卡 ───────────────────────────────────────── */
+/* ── 應援場卡 ───────────────────────────────────────── */
 .market-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

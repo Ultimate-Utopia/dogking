@@ -13,7 +13,7 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	/** 籌碼面額。點一次加一次，可疊出大額（企劃書 DEMO 圖的作法）。 */
+	/** 狗狗幣面額。點一次加一次，可疊出大額（企劃書 DEMO 圖的作法）。 */
 	const CHIPS = [100, 500, 1000, 5000, 10000];
 
 	/**
@@ -78,7 +78,7 @@
 	const fmt = (n: number) => n.toLocaleString('zh-TW');
 
 	/**
-	 * 倒數歸零就立刻當成封盤，不等伺服器狀態同步。
+	 * 倒數歸零就立刻當成關閉應援，不等伺服器狀態同步。
 	 *
 	 * /api/board 有 3 秒快取，狀態改成 locked 之後畫面最多還會慢 3 秒。
 	 * 那段空窗期若還顯示應援介面，使用者按下去只會拿到失敗訊息。
@@ -92,8 +92,8 @@
 	const openMarkets = $derived(board.markets.filter(isOpen));
 
 	/**
-	 * 畫面上所有可操作的盤口：上方當前場次的各局盤，加上下方「所有場次」的整場盤。
-	 * 同一個盤口可能同時出現在兩邊（當前場次的整場盤），find 取到的是同一筆，無妨。
+	 * 畫面上所有可操作的應援場：上方當前場次的各局，加上下方「所有場次」的整場應援。
+	 * 同一個應援場可能同時出現在兩邊（當前場次的整場應援），find 取到的是同一筆，無妨。
 	 */
 	const pageMarkets = $derived.by(() => {
 		const out = [...board.markets];
@@ -106,9 +106,9 @@
 	);
 
 	/**
-	 * 正在操作的盤口屬於哪一場、雙方是誰。
+	 * 正在操作的應援場屬於哪一場、雙方是誰。
 	 *
-	 * 確認視窗要寫出「你押的是誰」，但下方列表的盤口不屬於當前場次，
+	 * 確認視窗要寫出「你應援的是誰」，但下方列表的應援場不屬於當前場次，
 	 * 名字不能再從 board.current 拿。對手未定時退而顯示晉級來源（M1 勝者）。
 	 */
 	const activeTarget = $derived.by(() => {
@@ -140,7 +140,7 @@
 		return !!bar.market && isOpen(bar.market);
 	}
 
-	/** 封盤剩餘秒數，以伺服器時鐘計算。 */
+	/** 關閉應援剩餘秒數，以伺服器時鐘計算。 */
 	function remaining(lockAt: string | null): number | null {
 		if (!lockAt) return null;
 		const ms = new Date(lockAt).getTime() - (tick + clockSkew);
@@ -151,7 +151,7 @@
 		return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 	}
 
-	/** 依目前彩池估算獲得。封盤前賠率會變，所以只是預估。 */
+	/** 依目前獎池估算獲得。關閉應援前分配倍率會變，所以只是預估。 */
 	const estimate = $derived.by(() => {
 		if (!activeMarket || !pickedSide || stake <= 0) return 0;
 		const pool = pickedSide === 'blue' ? activeMarket.poolBlue : activeMarket.poolRed;
@@ -165,9 +165,9 @@
 	);
 
 	/**
-	 * 我在某個盤口上的持倉，同一邊的多筆合併成一列。
+	 * 我在某個應援場上的持倉，同一邊的多筆合併成一列。
 	 *
-	 * 觀眾常常分好幾次加碼，只列原始注單會很難看出「我到底押了多少」。
+	 * 觀眾常常分好幾次加碼，只列原始應援紀錄會很難看出「我到底投入多少」。
 	 */
 	function myPositions(marketId: number) {
 		const rows = myBets.filter((b) => b.marketId === marketId);
@@ -186,7 +186,7 @@
 		return out;
 	}
 
-	/** 依「目前」彩池估算持倉可領回多少。彩池已含自己的注，所以直接算即可。 */
+	/** 依「目前」獎池估算持倉可領回多少。獎池已含自己的注，所以直接算即可。 */
 	function positionEstimate(m: (typeof board.markets)[number], side: 'blue' | 'red', amount: number) {
 		const pool = side === 'blue' ? m.poolBlue : m.poolRed;
 		return pool > 0 ? Math.floor((amount * m.total) / pool) : 0;
@@ -194,7 +194,7 @@
 
 	/**
 	 * 選擇陣營。點已選中的那邊等於取消，讓「改變主意」有路可退。
-	 * 換邊時金額刻意保留 —— 觀眾常常是想比較「同樣的錢押另一邊會怎樣」。
+	 * 換邊時金額刻意保留 —— 觀眾常常是想比較「同樣的錢應援另一邊會怎樣」。
 	 */
 	function pick(marketId: number, side: 'blue' | 'red') {
 		if (pickedMarket === marketId && pickedSide === side) {
@@ -227,7 +227,7 @@
 		stakeClamped = r.clamped;
 	}
 
-	/** 金額被籌碼按鈕或應援成功改動時，輸入框要跟著更新 */
+	/** 金額被狗狗幣按鈕或應援成功改動時，輸入框要跟著更新 */
 	$effect(() => {
 		const shown = stakeText === '' ? 0 : Number(stakeText);
 		if (shown !== stake) {
@@ -242,7 +242,7 @@
 	}
 
 	/**
-	 * 已結算／已取消的盤口指紋，用來偵測「剛剛派彩了」。
+	 * 已結算／已取消的應援場指紋，用來偵測「剛剛發放了」。
 	 * 看板反正每 3 秒都會拿到，比對一下就知道要不要更新餘額。
 	 */
 	let settledMark = $state('');
@@ -264,7 +264,7 @@
 	 * Function —— 不像看板那樣所有人共用一份 CDN 快取。若每 3 秒問一次，
 	 * 300 人的活動就是 180 萬次呼叫，而 Netlify 免費額度是 12.5 萬次／月。
 	 *
-	 * 餘額只有三種情況會變：開啟頁面、自己應援、盤口派彩。
+	 * 餘額只有三種情況會變：開啟頁面、自己應援、應援場發放。
 	 * 事件驅動不但省下 99% 的呼叫，反應還更快（應援完立刻更新，不用等輪詢）。
 	 */
 	async function refreshMe() {
@@ -288,11 +288,11 @@
 			polledLeaderboard = l.rows;
 			clockSkew = new Date(b.now).getTime() - Date.now();
 
-			// 有盤口結算或取消 → 派彩或退款發生了 → 這時才去看餘額。
+			// 有應援場結算或取消 → 發放或退還發生了 → 這時才去看餘額。
 			//
 			// 基準值在 onMount 就設好了，所以這裡任何變化都是真的發生了事情。
 			// 不要再加「基準值非空才比對」之類的防呆 —— 頁面開啟時若剛好
-			// 一個已結算盤口都沒有，那種寫法會把第一次派彩整個吃掉。
+			// 一個已結算應援場都沒有，那種寫法會把第一次發放整個吃掉。
 			const mark = markOf(b.markets);
 			if (mark !== settledMark) {
 				settledMark = mark;
@@ -343,7 +343,7 @@
 			stake = 0;
 			pickedSide = null;
 			newKey();
-			// 錢剛扣掉，立刻更新餘額與彩池
+			// 錢剛扣掉，立刻更新餘額與獎池
 			refreshMe();
 			refreshBoard();
 		}
@@ -422,9 +422,9 @@
 					{#if openMarkets.length > 0}
 						<span class="tag t-open" style="color:var(--ok);border:1px solid var(--ok)">開放應援</span>
 					{:else if board.markets.some((m) => m.state === 'locked')}
-						<span class="tag" style="color:var(--red);border:1px solid var(--red)">已封盤・結算中</span>
+						<span class="tag" style="color:var(--red);border:1px solid var(--red)">已關閉應援・結算中</span>
 					{:else}
-						<span class="tag" style="color:var(--muted);border:1px solid var(--line)">尚未開盤</span>
+						<span class="tag" style="color:var(--muted);border:1px solid var(--line)">尚未開放應援</span>
 					{/if}
 				</div>
 			</div>
@@ -448,7 +448,7 @@
 			</div>
 		</div>
 
-		<!-- ── 盤口與應援 ─────────────────────────────── -->
+		<!-- ── 應援場與應援 ─────────────────────────────── -->
 		<div class="markets">
 			{#each board.markets as m (m.id)}
 				{@const secs = remaining(m.lockAt)}
@@ -457,17 +457,17 @@
 					<div class="mk-top">
 						<span class="mk-name">{m.label}</span>
 						{#if isOpen(m) && secs !== null && secs > 0}
-							<span class="countdown">{mmss(secs)} 後封盤</span>
+							<span class="countdown">{mmss(secs)} 後關閉應援</span>
 						{:else if isOpen(m)}
 							<span style="color:var(--ok);font-size:13px">開放應援中</span>
 						{:else if m.state === 'locked' || (m.state === 'open' && secs === 0)}
-							<span style="color:var(--red);font-size:13px">已封盤</span>
+							<span style="color:var(--red);font-size:13px">已關閉應援</span>
 						{:else if m.state === 'settled'}
 							<span style="font-size:13px">
 								{m.winnerSide === 'blue' ? c.blueName : c.redName} 獲勝
 							</span>
 						{:else if m.state === 'void'}
-							<span style="font-size:13px;color:var(--muted)">已取消・全額退款</span>
+							<span style="font-size:13px;color:var(--muted)">已取消・全額退還</span>
 						{/if}
 					</div>
 
@@ -492,7 +492,7 @@
 					</div>
 					<div class="split-legend">
 						<span>{m.total > 0 ? Math.round((m.poolBlue / m.total) * 100) : 0}%</span>
-						<span>總彩池 {fmt(m.total)}</span>
+						<span>總獎池 {fmt(m.total)}</span>
 						<span>{m.total > 0 ? Math.round((m.poolRed / m.total) * 100) : 0}%</span>
 					</div>
 
@@ -516,13 +516,13 @@
 											{:else if p.state === 'lost'}
 												<span style="color:var(--red)">未中</span>
 											{:else}
-												已退款
+												已退還
 											{/if}
 										</span>
 									</div>
 								{/each}
 								{#if m.state === 'open'}
-									<p class="mine-note">預估值會隨其他人應援而變動，最終依封盤後的彩池計算。</p>
+									<p class="mine-note">預估值會隨其他人應援而變動，最終依關閉應援後的獎池計算。</p>
 								{/if}
 							</div>
 						{/if}
@@ -553,7 +553,7 @@
 
 								{#if isActive && pickedSide}
 									<p class="switch-hint">
-										想改押另一邊？直接點另一顆按鈕，金額會保留。
+										想改成應援另一邊？直接點另一顆按鈕，金額會保留。
 										<button class="linkish" onclick={() => pick(m.id, pickedSide!)}>取消選擇</button>
 									</p>
 								{/if}
@@ -566,7 +566,7 @@
 											</button>
 										{/each}
 										<button class="chip-btn" disabled={balance <= 0} onclick={() => (stake = balance)}>
-											All-in
+											全部
 										</button>
 										<button class="chip-btn clear" onclick={() => (stake = 0)}>清除</button>
 									</div>
@@ -597,11 +597,11 @@
 							{/if}
 						</div>
 					{:else if m.state === 'locked' || m.state === 'open'}
-						<div class="closed-note">已封盤，等待賽果</div>
+						<div class="closed-note">已關閉應援，等待賽果</div>
 					{/if}
 				</div>
 			{:else}
-				<div class="mk"><p class="closed-note">這一場還沒開盤，稍候片刻。</p></div>
+				<div class="mk"><p class="closed-note">這一場還沒開放應援，稍候片刻。</p></div>
 			{/each}
 		</div>
 	{:else}
@@ -659,8 +659,8 @@
 		<div class="card2" style="margin-bottom:16px">
 			<h2>所有場次・提前應援</h2>
 			<p class="bars-note">
-				每一場都可以提前押，<strong>連還沒確定對手的場次也可以</strong> ——
-				押的是那一側，例如「M1 勝者」。主持人會在每場開打前約一分鐘收盤，收盤後就不能再應援。
+				每一場都可以提前應援，<strong>連還沒確定對手的場次也可以</strong> ——
+				應援的是那一側，例如「M1 勝者」。主持人會在每場開打前約一分鐘關閉該場應援，關閉後就不能再投入。
 			</p>
 
 			<div class="bars-grid">
@@ -684,13 +684,13 @@
 						{:else if canPick}
 							<span class="tag t-open">開放應援</span>
 						{:else if mk?.state === 'settled'}
-							<span class="tag t-settled">已派彩</span>
+							<span class="tag t-settled">已發放</span>
 						{:else if mk?.state === 'void'}
 							<span class="tag t-void">已取消</span>
 						{:else if mk}
-							<span class="tag t-locked">已封盤</span>
+							<span class="tag t-locked">已關閉應援</span>
 						{:else}
-							<span class="tag t-pending">尚未開盤</span>
+							<span class="tag t-pending">尚未開放應援</span>
 						{/if}
 					</div>
 
@@ -717,7 +717,7 @@
 						</div>
 						<div class="split-legend">
 							<span>{mk.total > 0 ? Math.round((mk.poolBlue / mk.total) * 100) : 0}%</span>
-							<span>總彩池 {fmt(mk.total)}</span>
+							<span>總獎池 {fmt(mk.total)}</span>
 							<span>{mk.total > 0 ? Math.round((mk.poolRed / mk.total) * 100) : 0}%</span>
 						</div>
 					{/if}
@@ -755,12 +755,12 @@
 					{:else}
 						<!--
 							不能應援時也佔住按鈕的位置：同一排的卡片底部才會對齊，
-							觀眾也看得到「為什麼不能押」，而不是按鈕憑空消失。
+							觀眾也看得到「為什麼不能應援」，而不是按鈕憑空消失。
 						-->
 						<div class="bar-bet off">
 							{#if mk?.state === 'void'}已取消，應援金額已全數退還
-							{:else if mk?.state === 'settled'}已派彩
-							{:else if mk}已封盤，等待賽果
+							{:else if mk?.state === 'settled'}已發放
+							{:else if mk}已關閉應援，等待賽果
 							{:else}尚未開放應援{/if}
 						</div>
 					{/if}
@@ -791,7 +791,7 @@
 										</button>
 									{/each}
 									<button class="chip-btn" disabled={balance <= 0} onclick={() => (stake = balance)}>
-										All-in
+										全部
 									</button>
 									<button class="chip-btn clear" onclick={() => (stake = 0)}>清除</button>
 								</div>
@@ -839,7 +839,7 @@
 	<!-- ── 排行榜與個人紀錄 ──────────────────────────── -->
 	<div class="cols">
 		<div class="card2">
-			<h2>籌碼排行榜 TOP 5</h2>
+			<h2>狗狗幣排行榜 TOP 5</h2>
 			{#each leaderboard as r (r.rank)}
 				<div class="rank-row" class:prized={r.rank <= 3}>
 					<span class="r">{r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
@@ -862,11 +862,11 @@
 						<div>
 							<div>第 {b.matchOrderNo} 場・{b.label}</div>
 							<div class="meta">
-								押 {b.side === 'blue' ? '藍方' : '紅方'} {fmt(b.amount)}
-								{#if b.state === 'pending'}・等待開獎
-								{:else if b.state === 'won'}・獲勝（已派彩）
+								應援 {b.side === 'blue' ? '藍方' : '紅方'} {fmt(b.amount)}
+								{#if b.state === 'pending'}・等待賽果
+								{:else if b.state === 'won'}・獲勝（已發放）
 								{:else if b.state === 'lost'}・失敗
-								{:else}・已退款{/if}
+								{:else}・已退還{/if}
 							</div>
 						</div>
 						<div class="amt" style="color:{b.net > 0 ? 'var(--ok)' : b.net < 0 ? 'var(--red)' : 'var(--muted)'}">
@@ -933,9 +933,10 @@
 	<div class="foot">
 		<strong>本平台的狗狗幣無實際金錢價值，僅供娛樂用途。</strong>
 		不可轉讓、不可兌換現金，活動結束後全數回收。<br />
-		賠率為彩池分配制：你的獎金 = 總彩池 × 你的注 ÷ 贏方總注，除不盡採無條件捨去。<br />
-		封盤前賠率會隨應援變動，畫面顯示為預估值，最終依封盤後的彩池計算。<br />
-		平局、比賽取消或選手退賽時，該盤口全額退款。
+		獎池分配制：你可領回 = 總獎池 × 你投入的金額 ÷ 獲勝方總投入，除不盡無條件捨去。<br />
+		關閉應援前分配倍率會隨應援變動，畫面顯示為預估值，最終依關閉當下的獎池計算。<br />
+		<strong>獲勝方若無人應援，該場獎池全數由系統回收，不分配也不退還。</strong><br />
+		平局、比賽取消或選手退賽時，該場應援全額退還。
 	</div>
 </div>
 
@@ -951,7 +952,7 @@
 			<dl>
 				<dt>場次</dt>
 				<dd>{activeTarget.title}</dd>
-				<dt>盤口</dt>
+				<dt>項目</dt>
 				<dd>{activeMarket.label}</dd>
 				<dt>應援</dt>
 				<dd style="color:{pickedSide === 'blue' ? 'var(--blue)' : 'var(--red)'}">{nm}</dd>
@@ -961,7 +962,7 @@
 				<dd>{fmt(estimate)}</dd>
 			</dl>
 			<p class="fine">
-				應援後<strong>無法取消或更改</strong>。預估獲得會隨其他人應援而變動，最終金額依封盤後的彩池計算。
+				應援後<strong>無法取消或更改</strong>。預估獲得會隨其他人應援而變動，最終金額依關閉應援後的獎池計算。
 			</p>
 			<form method="POST" action="?/bet" use:enhance class="modal-actions">
 				<input type="hidden" name="marketId" value={activeMarket.id} />

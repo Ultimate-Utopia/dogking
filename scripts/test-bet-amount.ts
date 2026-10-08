@@ -1,5 +1,5 @@
 /**
- * 下注金額輸入規則的測試。不需要資料庫。
+ * 應援金額輸入規則的測試。不需要資料庫。
  *
  *   node scripts/test-bet-amount.ts
  */
@@ -15,11 +15,11 @@ const t = (name: string, fn: () => void) => {
 
 const B = 10000; // 持有 10,000 狗狗幣
 
-console.log('下注金額輸入');
+console.log('應援金額輸入');
 
 t('一般數字', () => assert.deepEqual(sanitizeStake('1234', B), { text: '1234', value: 1234, clamped: false }));
 
-t('空白視為未輸入，不能下注', () => assert.deepEqual(sanitizeStake('', B), { text: '', value: 0, clamped: false }));
+t('空白視為未輸入，不能應援', () => assert.deepEqual(sanitizeStake('', B), { text: '', value: 0, clamped: false }));
 
 t('小數點不合規則，只取數字', () => assert.equal(sanitizeStake('12.5', B).value, 125));
 
@@ -37,7 +37,7 @@ t('剛好等於持有量不算被壓', () => assert.deepEqual(sanitizeStake('100
 
 t('開頭多餘的 0 會去掉', () => assert.deepEqual(sanitizeStake('007', B), { text: '7', value: 7, clamped: false }));
 
-t('只打 0 就是 0，不能下注', () => assert.deepEqual(sanitizeStake('0', B), { text: '0', value: 0, clamped: false }));
+t('只打 0 就是 0，不能應援', () => assert.deepEqual(sanitizeStake('0', B), { text: '0', value: 0, clamped: false }));
 
 t('餘額為 0 時打什麼都是 0', () => assert.deepEqual(sanitizeStake('500', 0), { text: '0', value: 0, clamped: true }));
 

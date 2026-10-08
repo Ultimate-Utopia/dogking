@@ -65,7 +65,7 @@ export async function writeLedger(tx: Executor, entry: LedgerEntry): Promise<num
 /**
  * 鎖定使用者資料列，直到交易結束。
  *
- * 這是防止併發扣款的關鍵。下注流程必須先呼叫這個，
+ * 這是防止併發扣款的關鍵。應援流程必須先呼叫這個，
  * 同一使用者的第二筆請求會排隊等待，讀到的餘額才是正確的。
  */
 export async function lockUser(tx: Executor, userId: string): Promise<void> {
@@ -95,11 +95,11 @@ export async function getHistory(userId: string, limit = 50) {
 /** 帳本類型對觀眾的說法。資料庫存英文，畫面不該露出來。 */
 const TYPE_LABEL: Record<string, string> = {
 	signup: '註冊贈幣',
-	// 用詞依主辦方要求：面對觀眾一律講「應援」「贈幣」，不用「發幣」「下注」
+	// 用詞依主辦方要求：面對觀眾一律講「應援」「贈幣」，不用「發幣」「下注」等字眼
 	purchase: '商品消費贈幣',
 	bet: '應援',
-	payout: '派彩',
-	refund: '退款',
+	payout: '應援獲勝發放',
+	refund: '退還',
 	adjust: '人工調整'
 };
 
@@ -108,12 +108,12 @@ export interface CoinHistoryRow {
 	type: string;
 	/** 中文類型名稱 */
 	label: string;
-	/** 有號數。下注為負，派彩為正。 */
+	/** 有號數。應援扣款為負，發放為正。 */
 	amount: number;
 	balanceAfter: number;
 	note: string | null;
 	createdAt: string;
-	/** 下注與派彩才有。用來讓觀眾知道是哪一場。 */
+	/** 應援與發放才有。用來讓觀眾知道是哪一場。 */
 	matchOrderNo: number | null;
 	roundLabel: string | null;
 	gameNo: number | null;
@@ -122,8 +122,8 @@ export interface CoinHistoryRow {
 /**
  * 「狗狗幣從哪來、到哪去」—— 企劃書 §一要求要能給觀眾看。
  *
- * 下注與派彩帶上場次與盤口，否則列表上會是一連串
- * 分不出來的「下注 −500」，觀眾根本對不上賬。
+ * 應援與發放帶上場次與應援場，否則列表上會是一連串
+ * 分不出來的「應援 −500」，觀眾根本對不上賬。
  * 帳本只存 ref_market_id，因此需要 join 回 markets 與 matches。
  */
 export async function getCoinHistory(userId: string, limit = 60): Promise<CoinHistoryRow[]> {

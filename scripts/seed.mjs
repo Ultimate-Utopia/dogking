@@ -86,13 +86,13 @@ try {
 	const [{ count }] = await sql`SELECT COUNT(*)::int AS count FROM matches`;
 
 	// --replace-matches：賽程本身改了（例如賽程圖與原先假設不符）時用。
-	// 有任何注單就拒絕 —— 那代表已經有人押在這些場次上，
-	// 砍掉重建會讓注單指向不存在的場次。請先跑 scripts/reset.mjs。
+	// 有任何應援紀錄就拒絕 —— 那代表已經有人應援在這些場次上，
+	// 砍掉重建會讓應援紀錄指向不存在的場次。請先跑 scripts/reset.mjs。
 	if (REPLACE_MATCHES && count > 0) {
 		const [{ bets }] = await sql`SELECT COUNT(*)::int AS bets FROM bets`;
 		if (bets > 0) {
-			console.error(`  ❌ 目前有 ${bets} 筆注單，不能重建賽程。`);
-			console.error('     請先執行 node scripts/reset.mjs --apply 清除下注資料。');
+			console.error(`  ❌ 目前有 ${bets} 筆應援紀錄，不能重建賽程。`);
+			console.error('     請先執行 node scripts/reset.mjs --apply 清除應援資料。');
 			process.exit(1);
 		}
 		await sql`DELETE FROM markets`;

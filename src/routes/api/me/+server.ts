@@ -4,7 +4,7 @@ import { getBalance } from '$lib/server/ledger';
 import { getMyBets } from '$lib/server/board';
 
 /**
- * 個人資料：餘額與下注紀錄。
+ * 個人資料：餘額與應援紀錄。
  *
  * ⚠️ 這裡的內容因人而異，一旦被快取就會把甲的餘額送給乙。
  * no-store 是必要的，不要為了省流量改掉。

@@ -9,8 +9,8 @@ import { getBoardState } from '$lib/server/board';
  * 而 Netlify 免費額度是 12.5 萬次／月。加上這行快取後，
  * 打到函式的次數與人數無關，整場只有約 6,000 次。
  *
- * 代價是資料最多延遲 3 秒。封盤判定在 placeBet 內以伺服器時間執行，
- * 所以畫面慢 3 秒不會讓人下到封盤後的注。
+ * 代價是資料最多延遲 3 秒。關閉應援判定在 placeBet 內以伺服器時間執行，
+ * 所以畫面慢 3 秒不會讓人下到關閉應援後的注。
  */
 export const GET: RequestHandler = async ({ setHeaders }) => {
 	const state = await getBoardState();

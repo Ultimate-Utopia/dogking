@@ -47,7 +47,7 @@ export const users = pgTable(
 		 */
 		publicCode: text('public_code'),
 
-		/** 參賽主播。允許下注，但標記起來供事後查核（規格書 §10 內線風險）。 */
+		/** 參賽主播。允許應援，但標記起來供事後查核（規格書 §10 內線風險）。 */
 		isParticipant: boolean('is_participant').notNull().default(false),
 		isAdmin: boolean('is_admin').notNull().default(false),
 
@@ -86,7 +86,7 @@ export const sessions = pgTable(
 // users 是「觀眾帳號」（Discord 登入建立）。主播不一定會註冊網站帳號，
 // 硬塞進 users 就得偽造 discord_id。
 //
-// 若某位主播同時也是觀眾（規格書決策 E：參賽者可下注），
+// 若某位主播同時也是觀眾（規格書決策 E：參賽者可應援），
 // 那是另一筆獨立的 users 資料，以 users.is_participant 標記。
 // ─────────────────────────────────────────────────────────
 export const participants = pgTable('participants', {
@@ -169,7 +169,7 @@ export const matches = pgTable('matches', {
 });
 
 // ─────────────────────────────────────────────────────────
-// markets —— 盤口。整場盤與小局盤共用同一個抽象。
+// markets —— 應援場。整場應援與單局應援共用同一個抽象。
 // ─────────────────────────────────────────────────────────
 export const markets = pgTable(
 	'markets',
@@ -179,27 +179,27 @@ export const markets = pgTable(
 			.notNull()
 			.references(() => matches.id, { onDelete: 'cascade' }),
 
-		/** match = 整場盤，game = 小局盤 */
+		/** match = 整場應援，game = 單局應援 */
 		type: text('type').notNull(),
 		/**
-		 * 0 = 整場盤，1 以上 = 第 N 小局。
+		 * 0 = 整場應援，1 以上 = 第 N 小局。
 		 *
 		 * 刻意用 0 而非 NULL：Postgres 唯一索引把 NULL 視為互不相同，
-		 * 若整場盤的 game_no 是 NULL，下面的唯一索引就擋不住重複建立。
+		 * 若整場應援的 game_no 是 NULL，下面的唯一索引就擋不住重複建立。
 		 */
 		gameNo: integer('game_no').notNull().default(0),
 
 		/** pending | open | locked | settled | void */
 		state: text('state').notNull().default('pending'),
 
-		/** 彩池累計。以 bigint 儲存，避免大額下注溢位。 */
+		/** 獎池累計。以 bigint 儲存，避免大額應援溢位。 */
 		poolBlue: bigint('pool_blue', { mode: 'number' }).notNull().default(0),
 		poolRed: bigint('pool_red', { mode: 'number' }).notNull().default(0),
 
 		/** blue | red | null */
 		winnerSide: text('winner_side'),
 
-		/** 預定封盤時間。操作員按下倒數後才有值，前台據此顯示計時器。 */
+		/** 預定關閉應援時間。操作員按下倒數後才有值，前台據此顯示計時器。 */
 		lockAt: timestamp('lock_at', { withTimezone: true }),
 
 		openedAt: timestamp('opened_at', { withTimezone: true }),
@@ -209,13 +209,13 @@ export const markets = pgTable(
 	(t) => [
 		index('markets_match_id_idx').on(t.matchId),
 		index('markets_state_idx').on(t.state),
-		// 同一場次的同一個盤口不可重複建立
+		// 同一場次的同一個應援場不可重複建立
 		uniqueIndex('markets_match_type_game_idx').on(t.matchId, t.type, t.gameNo)
 	]
 );
 
 // ─────────────────────────────────────────────────────────
-// bets —— 下注
+// bets —— 應援
 // ─────────────────────────────────────────────────────────
 export const bets = pgTable(
 	'bets',
@@ -234,10 +234,10 @@ export const bets = pgTable(
 
 		/** pending | won | lost | refunded */
 		state: text('state').notNull().default('pending'),
-		/** 派彩金額（含本金）。未結算為 0。 */
+		/** 發放金額（含本金）。未結算為 0。 */
 		payout: bigint('payout', { mode: 'number' }).notNull().default(0),
 
-		/** 冪等鍵，防止連點造成重複下注（規格書 §05） */
+		/** 冪等鍵，防止連點造成重複應援（規格書 §05） */
 		idempotencyKey: text('idempotency_key').notNull(),
 
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
@@ -253,7 +253,7 @@ export const bets = pgTable(
 // ledger —— 狗狗幣帳本。唯一真相來源，只新增不修改。
 // ─────────────────────────────────────────────────────────
 
-/** signup 註冊贈送 / purchase 周邊訂單 / bet 下注扣款 / payout 派彩 / refund 退款 / adjust 人工調整 */
+/** signup 註冊贈送 / purchase 周邊訂單 / bet 應援扣款 / payout 發放 / refund 退還 / adjust 人工調整 */
 export type LedgerType = 'signup' | 'purchase' | 'bet' | 'payout' | 'refund' | 'adjust';
 
 export const ledger = pgTable(
@@ -265,7 +265,7 @@ export const ledger = pgTable(
 			.references(() => users.id),
 
 		type: text('type').notNull(),
-		/** 有號數。下注為負，派彩為正。 */
+		/** 有號數。應援扣款為負，發放為正。 */
 		amount: bigint('amount', { mode: 'number' }).notNull(),
 		/** 寫入當下的餘額快照，供對帳。爭議時仍以 SUM(amount) 為準。 */
 		balanceAfter: bigint('balance_after', { mode: 'number' }).notNull(),
@@ -329,7 +329,7 @@ export const redeemCodes = pgTable('redeem_codes', {
 });
 
 // ─────────────────────────────────────────────────────────
-// admin_logs —— 後台操作紀錄。誰在幾點對哪個盤口做了什麼。
+// admin_logs —— 後台操作紀錄。誰在幾點對哪個應援場做了什麼。
 // ─────────────────────────────────────────────────────────
 export const adminLogs = pgTable(
 	'admin_logs',

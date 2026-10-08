@@ -212,7 +212,7 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
 		/**
 		 * 計幣金額不含運費：商品總額 − 運費 + 平台運費券。
 		 * 運費是付給物流的，不是周邊消費；運費券抵的也是運費，要一起拿掉。
-		 * 選「少算」而不是「多算」：少發可以事後用兌換券補，多發的幣可能已經被押出去收不回來。
+		 * 選「少算」而不是「多算」：少發可以事後用兌換券補，多發的幣可能已經被應援出去收不回來。
 		 */
 		const amountTwd = Number.isFinite(total) ? total - shipping + shippingCoupon : NaN;
 

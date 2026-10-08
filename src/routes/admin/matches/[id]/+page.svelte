@@ -6,7 +6,7 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	/**
-	 * 盤口的即時狀態。刻意只更新顯示，不重載整頁 ——
+	 * 應援場的即時狀態。刻意只更新顯示，不重載整頁 ——
 	 * 操作員可能正在輸入比分，整頁重載會把輸入框蓋掉。
 	 */
 	let live = $state<{ now: string; markets: PageData['markets'] } | null>(null);
@@ -36,8 +36,8 @@
 				live = j;
 				clockSkew = new Date(j.now).getTime() - Date.now();
 
-				// 盤口狀態改變時（例如倒數到期自動封盤）才重載，
-				// 好讓按鈕換成對應的動作。彩池變動不需要重載。
+				// 應援場狀態改變時（例如倒數到期自動關閉）才重載，
+				// 好讓按鈕換成對應的動作。獎池變動不需要重載。
 				const states = j.markets.map((m: { id: number; state: string }) => `${m.id}:${m.state}`).join(',');
 				if (lastStates && states !== lastStates) invalidateAll();
 				lastStates = states;
@@ -59,7 +59,7 @@
 	const STATE_LABEL: Record<string, string> = {
 		pending: '未建立',
 		open: '開放應援',
-		locked: '已封盤',
+		locked: '已關閉應援',
 		settled: '已結算',
 		void: '已取消'
 	};
@@ -71,12 +71,12 @@
 		data.participants.find((p) => p.id === data.match.redParticipantId)?.name ?? '紅方'
 	);
 
-	/** 已建立的盤口，依 gameNo 對應。優先用輪詢到的即時資料。 */
+	/** 已建立的應援場，依 gameNo 對應。優先用輪詢到的即時資料。 */
 	const marketOf = (gameNo: number) => shownMarkets.find((m) => m.gameNo === gameNo);
 
-	/** 整場盤 + 該賽制的所有小局 */
+	/** 整場應援 + 該賽制的所有小局 */
 	const slots = $derived([
-		{ gameNo: 0, label: '整場盤' },
+		{ gameNo: 0, label: '整場應援' },
 		...Array.from({ length: data.maxGames }, (_, i) => ({
 			gameNo: i + 1,
 			label: `第 ${i + 1} 局`
@@ -100,21 +100,21 @@
 	<div class="ok-msg">{form.success}</div>
 {/if}
 
-<!-- ── 派彩確認：不可逆，先讓操作員看見後果 ───────────── -->
+<!-- ── 發放確認：不可逆，先讓操作員看見後果 ───────────── -->
 {#if data.preview}
 	{@const p = data.preview}
 	<div class="confirm">
-		<h3>確認派彩：{sideName(p.side)}獲勝</h3>
+		<h3>確認發放：{sideName(p.side)}獲勝</h3>
 		<p class="warn">
-			{#if p.willRefund}
+			{#if p.willForfeit}
 				{p.reason}
 			{:else}
-				派彩會立即寫入帳本，<strong>無法復原</strong>。請確認勝方正確後再按下確認。
+				發放會立即寫入帳本，<strong>無法復原</strong>。請確認勝方正確後再按下確認。
 			{/if}
 		</p>
 
 		{#if p.rows.length === 0}
-			<p class="warn">這個盤口沒有任何應援，結算後不會有任何金額變動。</p>
+			<p class="warn">這個應援場沒有任何應援，結算後不會有任何金額變動。</p>
 		{:else}
 			<table>
 				<thead>
@@ -140,8 +140,9 @@
 			</table>
 
 			<p class="warn">
-				總彩池 {fmt(p.totalPool)}　→　派出 {fmt(p.totalPayout)}
-				{#if p.remainder > 0}（除不盡餘 {fmt(p.remainder)} 留在系統）{/if}
+				總獎池 {fmt(p.totalPool)}　→　派出 {fmt(p.totalPayout)}
+				{#if p.willForfeit}（整池 {fmt(p.remainder)} 由系統回收，不退還）
+				{:else if p.remainder > 0}（除不盡餘 {fmt(p.remainder)} 留在系統）{/if}
 			</p>
 		{/if}
 
@@ -150,7 +151,7 @@
 				<input type="hidden" name="marketId" value={p.marketId} />
 				<input type="hidden" name="side" value={p.side} />
 				<button class="b {p.side === 'blue' ? 'b-blue' : 'b-red'}" type="submit">
-					確認派彩給{sideName(p.side)}
+					確認發放給{sideName(p.side)}
 				</button>
 			</form>
 			<a class="b b-quiet" style="text-align:center;text-decoration:none;line-height:1.6" href="/admin/matches/{data.match.id}">
@@ -189,7 +190,7 @@
 		<button class="b b-quiet" style="flex:0" type="submit">儲存</button>
 	</form>
 	<p class="hint" style="margin:14px 0 0">
-		改賽制會影響小局盤的數量（BO1 一局、BO3 三局、BO5 五局）。已開的盤口不會被刪除。
+		改賽制會影響單局應援的數量（BO1 一局、BO3 三局、BO5 五局）。已開的應援場不會被刪除。
 	</p>
 </div>
 
@@ -252,10 +253,10 @@
 	</form>
 </div>
 
-<!-- ── 盤口 ─────────────────────────────────────────── -->
-<h2>盤口</h2>
+<!-- ── 應援場 ─────────────────────────────────────────── -->
+<h2>應援場</h2>
 <p class="hint">
-	整場盤賭這一場的勝負，小局盤賭單一局。每個盤口的流程都是：開盤 → 封盤 → 判定勝方 → 派彩。
+	整場應援是看這一場的勝負，單局應援只看單一局。每個應援場的流程都是：開放應援 → 關閉應援 → 判定勝方 → 發放。
 </p>
 
 <div class="market-grid">
@@ -296,7 +297,7 @@
 					<span>{m.odds.red ? m.odds.red.toFixed(2) : '—'} {redName}</span>
 				</div>
 			{:else}
-				<div class="pools"><div class="pool-empty">尚未開盤</div></div>
+				<div class="pools"><div class="pool-empty">尚未開放應援</div></div>
 				<div class="pool-legend"><span></span><span>—</span><span></span></div>
 			{/if}
 
@@ -304,17 +305,17 @@
 				{#if state === 'pending' || !m}
 					<form method="POST" action="?/openMarket">
 						<input type="hidden" name="gameNo" value={slot.gameNo} />
-						<button class="b b-go" type="submit">開盤</button>
+						<button class="b b-go" type="submit">開放應援</button>
 					</form>
 				{:else if state === 'open'}
 					<form method="POST" action="?/lockMarket">
 						<input type="hidden" name="marketId" value={m.id} />
-						<button class="b b-lock" type="submit">立即封盤</button>
+						<button class="b b-lock" type="submit">立即關閉應援</button>
 					</form>
 					<form method="POST" action="?/scheduleLock">
 						<input type="hidden" name="marketId" value={m.id} />
 						<input type="hidden" name="seconds" value="60" />
-						<button class="b b-quiet" type="submit">60 秒後封盤</button>
+						<button class="b b-quiet" type="submit">60 秒後關閉應援</button>
 					</form>
 				{:else if state === 'locked'}
 					<a class="b b-blue" style="text-align:center;text-decoration:none;line-height:1.6"
@@ -324,14 +325,14 @@
 					<form method="POST" action="?/voidMarket">
 						<input type="hidden" name="marketId" value={m.id} />
 						<input type="hidden" name="reason" value="平局或賽事取消" />
-						<button class="b b-quiet" type="submit">取消並退款</button>
+						<button class="b b-quiet" type="submit">取消並退還</button>
 					</form>
 				{:else}
 					<span class="hint" style="margin:0">
 						{#if m?.winnerSide}
 							{sideName(m.winnerSide)}獲勝・已完成
 						{:else}
-							已取消，全數退款
+							已取消，全數退還
 						{/if}
 					</span>
 				{/if}
@@ -344,7 +345,7 @@
 <h2>刪除場次</h2>
 <div class="panel">
 	<p class="hint" style="margin:0 0 12px">
-		只有在還沒有人應援時才能刪除。已經有注單的場次請改用盤口的「取消並退款」。
+		只有在還沒有人應援時才能刪除。已經有應援紀錄的場次請改用應援場的「取消並退還」。
 	</p>
 	<form method="POST" action="?/deleteMatch">
 		<button class="b b-quiet" style="flex:0;color:var(--red);border-color:var(--red)" type="submit">

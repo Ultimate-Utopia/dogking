@@ -15,7 +15,7 @@
 	 * 不套用前台的 app.css 與版面容器。
 	 *
 	 * 網址參數：
-	 *   ?view=board|leaderboard   顯示賭盤或排行榜，預設 board
+	 *   ?view=board|leaderboard   顯示應援區或排行榜，預設 board
 	 *   ?anchor=tl|tr|bl|br|tc|bc 貼齊位置，預設 tl
 	 *   ?scale=1.4               整體縮放，預設 1
 	 *   ?debug=1                 顯示外框，方便在 OBS 裡對位
@@ -61,10 +61,10 @@
 	const fmt = (n: number) => n.toLocaleString('zh-TW');
 
 	/**
-	 * 要播哪一個盤口。
+	 * 要播哪一個應援場。
 	 *
-	 * 優先序刻意把「正在倒數的」排第一 —— 那是主播當下在講的盤口，
-	 * 也是觀眾最需要看到剩幾秒的。整場盤雖然排在小局前面，
+	 * 優先序刻意把「正在倒數的」排第一 —— 那是主播當下在講的應援場，
+	 * 也是觀眾最需要看到剩幾秒的。整場應援雖然排在小局前面，
 	 * 但通常早就開著了，沒有急迫性。
 	 *
 	 * 想固定顯示某一個可用 ?game=0（整場）或 ?game=1（第一局）。
@@ -93,9 +93,9 @@
 
 	const statusText = $derived.by(() => {
 		if (!active) return '準備中';
-		if (active.state === 'open') return secs !== null && secs <= 0 ? '已封盤' : '開放應援';
-		if (active.state === 'locked') return '已封盤';
-		if (active.state === 'settled') return '已開獎';
+		if (active.state === 'open') return secs !== null && secs <= 0 ? '已關閉應援' : '開放應援';
+		if (active.state === 'locked') return '已關閉應援';
+		if (active.state === 'settled') return '已結算';
 		if (active.state === 'void') return '已取消';
 		return '準備中';
 	});
@@ -147,7 +147,7 @@
 			<!-- ── 排行榜 ─────────────────────────────────── -->
 			<div class="panel {debug ? 'debug' : ''}">
 				<div class="head">
-					<span class="head-title">籌碼排行榜</span>
+					<span class="head-title">狗狗幣排行榜</span>
 					<span class="head-sub">TOP 5</span>
 				</div>
 				<div class="ranks">
@@ -163,7 +163,7 @@
 				</div>
 			</div>
 		{:else if current && active}
-			<!-- ── 賭盤 ───────────────────────────────────── -->
+			<!-- ── 應援區 ───────────────────────────────────── -->
 			<div class="panel {debug ? 'debug' : ''}">
 				<div class="head">
 					<span class="head-title">第 {current.orderNo} 場・{current.roundLabel}</span>
@@ -173,7 +173,7 @@
 
 				{#if active.state === 'open' && secs !== null && secs > 0}
 					<div class="timer {secs <= 10 ? 'urgent' : ''}">
-						<span class="timer-lab">封盤倒數</span>
+						<span class="timer-lab">關閉倒數</span>
 						<span class="timer-val">{mmss(secs)}</span>
 					</div>
 				{/if}
@@ -206,7 +206,7 @@
 				</div>
 				<div class="legend">
 					<span>{pct(active.poolBlue, active.total)}%　{fmt(active.poolBlue)}</span>
-					<span class="pot">總彩池 {fmt(active.total)}</span>
+					<span class="pot">總獎池 {fmt(active.total)}</span>
 					<span>{fmt(active.poolRed)}　{pct(active.poolRed, active.total)}%</span>
 				</div>
 			</div>

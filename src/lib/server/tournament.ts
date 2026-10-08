@@ -1,12 +1,12 @@
 /**
- * 賽程、盤口與彩池結算 —— 對應規格書 §05、§06
+ * 賽程、應援場與獎池結算 —— 對應規格書 §05、§06
  *
  * ─────────────────────────────────────────────────────────
  * 鎖定順序（非常重要，動這個檔案前先讀）
  *
  *   一律先鎖 market，再鎖 user。
  *
- * 下注與結算都會同時碰到「盤口」和「使用者」兩種資料列。
+ * 應援與結算都會同時碰到「應援場」和「使用者」兩種資料列。
  * 若兩邊的鎖定順序相反，高併發下就會死結。結算時還會依 user_id
  * 排序後再逐筆鎖定，確保多個結算之間也是同一個順序。
  * ─────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ import { markets, bets, matches, users, participants } from './db/schema';
 import { lockUser, writeLedger } from './ledger';
 import { calcOdds, calcPayout } from '../payout';
 
-// 彩池計算搬到 $lib/payout.ts（純函式、可不連資料庫測試），這裡照舊匯出給既有呼叫端
+// 獎池計算搬到 $lib/payout.ts（純函式、可不連資料庫測試），這裡照舊匯出給既有呼叫端
 export { calcOdds, calcPayout };
 import type { Side } from './db/schema';
 
@@ -26,7 +26,7 @@ type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export class MarketNotFoundError extends Error {
 	constructor(id: number) {
-		super(`找不到盤口 ${id}`);
+		super(`找不到應援場 ${id}`);
 		this.name = 'MarketNotFoundError';
 	}
 }
@@ -39,10 +39,10 @@ export class MarketStateError extends Error {
 }
 
 // ─────────────────────────────────────────────────────────
-// 盤口生命週期： pending → open → locked → settled / void
+// 應援場生命週期： pending → open → locked → settled / void
 // ─────────────────────────────────────────────────────────
 
-/** 建立盤口（若尚未存在）並開放下注。gameNo 0 = 整場盤，1 以上 = 第 N 小局。 */
+/** 建立應援場（若尚未存在）並開放應援。gameNo 0 = 整場應援，1 以上 = 第 N 小局。 */
 export async function openMarket(matchId: number, gameNo = 0) {
 	const [existing] = await db
 		.select()
@@ -52,7 +52,7 @@ export async function openMarket(matchId: number, gameNo = 0) {
 
 	if (existing) {
 		if (existing.state === 'settled' || existing.state === 'void') {
-			throw new MarketStateError('已結算或已取消的盤口不能重新開盤');
+			throw new MarketStateError('已結算或已取消的應援場不能重新開放應援');
 		}
 		const [updated] = await db
 			.update(markets)
@@ -77,13 +77,13 @@ export async function openMarket(matchId: number, gameNo = 0) {
 }
 
 /**
- * 一次開放所有場次的整場盤。
+ * 一次開放所有場次的整場應援。
  *
- * 這次的玩法是「開場就全部開放下注，主持人在每場開打前一分鐘手動收盤」，
- * 所以活動開始前要把十幾個盤口一口氣開起來，不可能一場一場點。
+ * 這次的玩法是「開場就全部開放應援，主持人在每場開打前一分鐘手動關閉應援」，
+ * 所以活動開始前要把十幾個應援場一口氣開起來，不可能一場一場點。
  *
- * 刻意只碰「還沒有盤口」的場次：
- *   ・已經 locked 的不會被重新打開 —— 那是主持人剛剛親手收的盤
+ * 刻意只碰「還沒有應援場」的場次：
+ *   ・已經 locked 的不會被重新打開 —— 那是主持人剛剛親手關掉的
  *   ・已結算或已取消的不動
  *   ・已經是 open 的就算已開放，不重設 lockAt（免得把排好的倒數清掉）
  */
@@ -115,14 +115,14 @@ export async function openAllMatchMarkets() {
 		}
 
 		if (market.state === 'open') alreadyOpen++;
-		else if (market.state === 'locked') skipped.push(`M${m.orderNo}（已封盤）`);
+		else if (market.state === 'locked') skipped.push(`M${m.orderNo}（已關閉應援）`);
 		else skipped.push(`M${m.orderNo}（已結算或取消）`);
 	}
 
 	return { created, alreadyOpen, skipped };
 }
 
-/** 立即封盤。 */
+/** 立即關閉應援。 */
 export async function lockMarket(marketId: number) {
 	const [updated] = await db
 		.update(markets)
@@ -130,16 +130,16 @@ export async function lockMarket(marketId: number) {
 		.where(and(eq(markets.id, marketId), eq(markets.state, 'open')))
 		.returning();
 
-	if (!updated) throw new MarketStateError('只有開放中的盤口能封盤');
+	if (!updated) throw new MarketStateError('只有開放中的應援場能關閉應援');
 	return updated;
 }
 
 /**
- * 把倒數已經到期的盤口真正改成 locked。
+ * 把倒數已經到期的應援場真正改成 locked。
  *
  * scheduleLock 只寫入時間戳，沒有排程器會在時間到時改狀態
  * （serverless 環境也不該假設有背景工作）。若不補這一步：
- *   - 前台的 state 還是 open，會繼續顯示下注介面
+ *   - 前台的 state 還是 open，會繼續顯示應援介面
  *   - settleMarket 要求 state 必須是 locked，後台反而結算不了
  *
  * 因此在每個讀取路徑的開頭呼叫一次，讓狀態自我修正。
@@ -156,10 +156,10 @@ export async function expireLocks(): Promise<number> {
 }
 
 /**
- * 設定 N 秒後封盤，前台據此顯示倒數。
+ * 設定 N 秒後關閉應援，前台據此顯示倒數。
  *
  * 時間一到會由 expireLocks() 把狀態改成 locked。
- * 即使那之前有人搶送下注，placeBet 也會以伺服器時間擋下。
+ * 即使那之前有人搶送應援，placeBet 也會以伺服器時間擋下。
  */
 export async function scheduleLock(marketId: number, seconds: number) {
 	const lockAt = new Date(Date.now() + seconds * 1000);
@@ -169,12 +169,12 @@ export async function scheduleLock(marketId: number, seconds: number) {
 		.where(and(eq(markets.id, marketId), eq(markets.state, 'open')))
 		.returning();
 
-	if (!updated) throw new MarketStateError('只有開放中的盤口能設定倒數');
+	if (!updated) throw new MarketStateError('只有開放中的應援場能設定倒數');
 	return updated;
 }
 
 // ─────────────────────────────────────────────────────────
-// 下注
+// 應援
 // ─────────────────────────────────────────────────────────
 
 export interface PlaceBetInput {
@@ -211,11 +211,11 @@ export async function placeBet(input: PlaceBetInput) {
 			.limit(1);
 
 		if (!market) throw new MarketNotFoundError(marketId);
-		if (market.state !== 'open') throw new MarketStateError('此盤口已封盤或尚未開放');
+		if (market.state !== 'open') throw new MarketStateError('此應援場已關閉應援或尚未開放');
 
-		// 封盤判定以伺服器時間為準，前台倒數僅供參考（規格書 §05）
+		// 關閉應援判定以伺服器時間為準，前台倒數僅供參考（規格書 §05）
 		if (market.lockAt && market.lockAt.getTime() <= Date.now()) {
-			throw new MarketStateError('此盤口已封盤');
+			throw new MarketStateError('此應援場已關閉應援');
 		}
 
 		await lockUser(tx, userId);
@@ -249,7 +249,7 @@ export async function placeBet(input: PlaceBetInput) {
 }
 
 // ─────────────────────────────────────────────────────────
-// 結算與退款
+// 結算與退還
 // ─────────────────────────────────────────────────────────
 
 export interface SettleResult {
@@ -268,10 +268,14 @@ export interface SettleResult {
 }
 
 /**
- * 結算盤口。
+ * 結算應援場。
  *
- * 邊界情況（規格書 §05）：贏方無人下注時全額退款，
- * 否則輸方的錢會沒有人可以分。
+ * 邊界情況（規格書 §05）：贏方無人應援時，整個獎池由系統回收，
+ * 不退還給觀眾 —— 主辦方 2026-10-09 確認的規則。
+ *
+ * 不需要特別處理：某一邊的池是 0 就代表沒有人應援那一邊
+ * （應援金額必須為正整數），下面的迴圈自然會把每一筆都標成輸。
+ * 以前這裡會全額退還，改動時請一併改掉前台與工作手冊的說明。
  */
 export async function settleMarket(marketId: number, winnerSide: Side): Promise<SettleResult> {
 	return db.transaction(async (tx) => {
@@ -284,33 +288,11 @@ export async function settleMarket(marketId: number, winnerSide: Side): Promise<
 
 		if (!market) throw new MarketNotFoundError(marketId);
 		if (market.state !== 'locked') {
-			throw new MarketStateError(`只有已封盤的盤口能結算（目前狀態：${market.state}）`);
+			throw new MarketStateError(`只有已關閉應援的應援場能結算（目前狀態：${market.state}）`);
 		}
 
 		const totalPool = market.poolBlue + market.poolRed;
 		const winnerPool = winnerSide === 'blue' ? market.poolBlue : market.poolRed;
-
-		if (winnerPool === 0) {
-			const refund = await refundAll(tx, marketId, '贏方無人應援，全額退款');
-			await tx
-				.update(markets)
-				.set({ state: 'void', winnerSide, settledAt: new Date() })
-				.where(eq(markets.id, marketId));
-
-			return {
-				marketId,
-				outcome: 'refunded',
-				winnerSide,
-				totalPool,
-				winnerPool,
-				paidOut: refund.total,
-				remainder: 0,
-				betsWon: 0,
-				betsLost: 0,
-				betsRefunded: refund.count,
-				note: '贏方無人應援，全額退款'
-			};
-		}
 
 		// 依 user_id 排序後逐筆處理，讓多個結算之間的鎖定順序一致
 		const pending = await tx
@@ -333,7 +315,7 @@ export async function settleMarket(marketId: number, winnerSide: Side): Promise<
 					amount: payout,
 					refMarketId: marketId,
 					refBetId: bet.id,
-					note: '派彩'
+					note: '獎池分配'
 				});
 				await tx.update(bets).set({ state: 'won', payout }).where(eq(bets.id, bet.id));
 				paidOut += payout;
@@ -359,13 +341,14 @@ export async function settleMarket(marketId: number, winnerSide: Side): Promise<
 			remainder: totalPool - paidOut,
 			betsWon,
 			betsLost,
-			betsRefunded: 0
+			betsRefunded: 0,
+			note: winnerPool === 0 && betsLost > 0 ? '贏方無人應援，獎池全數由系統回收' : undefined
 		};
 	});
 }
 
 /**
- * 取消盤口並全額退款。
+ * 取消應援場並全額退還。
  * 用於平局、選手退賽、判定爭議、比賽取消（規格書 §05）。
  */
 export async function voidMarket(marketId: number, reason: string): Promise<SettleResult> {
@@ -379,7 +362,7 @@ export async function voidMarket(marketId: number, reason: string): Promise<Sett
 
 		if (!market) throw new MarketNotFoundError(marketId);
 		if (market.state === 'settled' || market.state === 'void') {
-			throw new MarketStateError('此盤口已經結算或取消過了');
+			throw new MarketStateError('此應援場已經結算或取消過了');
 		}
 
 		const refund = await refundAll(tx, marketId, reason);
@@ -405,7 +388,7 @@ export async function voidMarket(marketId: number, reason: string): Promise<Sett
 	});
 }
 
-/** 把某盤口所有未結算的注全額退回。 */
+/** 把某應援場所有未結算的注全額退回。 */
 async function refundAll(tx: Executor, marketId: number, reason: string) {
 	const pending = await tx
 		.select()
@@ -438,8 +421,8 @@ async function refundAll(tx: Executor, marketId: number, reason: string) {
 export interface SettlePreview {
 	totalPool: number;
 	winnerPool: number;
-	/** 贏方無人下注時會轉為全額退款，而非派彩 */
-	willRefund: boolean;
+	/** 贏方無人應援 → 整池由系統回收，不發放也不退還 */
+	willForfeit: boolean;
 	reason?: string;
 	totalPayout: number;
 	remainder: number;
@@ -448,14 +431,14 @@ export interface SettlePreview {
 		side: Side;
 		amount: number;
 		payout: number;
-		result: '獲勝' | '失敗' | '退款';
+		result: '獲勝' | '失敗';
 	}>;
 }
 
 /**
  * 試算結算結果，不寫入任何東西。
  *
- * 派彩會直接寫進帳本且無法復原，所以後台在按下確認前
+ * 發放會直接寫進帳本且無法復原，所以後台在按下確認前
  * 必須先讓操作員看到「誰會拿到多少」。
  */
 export async function previewSettle(marketId: number, winnerSide: Side): Promise<SettlePreview> {
@@ -476,18 +459,15 @@ export async function previewSettle(marketId: number, winnerSide: Side): Promise
 		.where(and(eq(bets.marketId, marketId), eq(bets.state, 'pending')))
 		.orderBy(asc(bets.id));
 
-	const willRefund = winnerPool === 0 && rows.length > 0;
+	const willForfeit = winnerPool === 0 && rows.length > 0;
 
 	let totalPayout = 0;
 	const detailed = rows.map((r) => {
 		const side = r.side as Side;
 		let payout = 0;
-		let result: '獲勝' | '失敗' | '退款';
+		let result: '獲勝' | '失敗';
 
-		if (willRefund) {
-			payout = r.amount;
-			result = '退款';
-		} else if (side === winnerSide) {
+		if (side === winnerSide) {
 			payout = calcPayout(r.amount, winnerPool, totalPool);
 			result = '獲勝';
 		} else {
@@ -501,10 +481,10 @@ export async function previewSettle(marketId: number, winnerSide: Side): Promise
 	return {
 		totalPool,
 		winnerPool,
-		willRefund,
-		reason: willRefund ? '贏方無人應援，將全額退款' : undefined,
+		willForfeit,
+		reason: willForfeit ? '贏方無人應援，這一池將全數由系統回收，不會退還給觀眾。' : undefined,
 		totalPayout,
-		remainder: willRefund ? 0 : totalPool - totalPayout,
+		remainder: totalPool - totalPayout,
 		rows: detailed
 	};
 }
@@ -576,8 +556,8 @@ export async function createMatch(orderNo: number, roundLabel: string, format: s
 /**
  * 刪除場次。
  *
- * 只要盤口已經有人下注就拒絕 —— 那代表有真實的錢在裡面，
- * 應該用「取消並退款」而不是直接刪掉。
+ * 只要應援場已經有人應援就拒絕 —— 那代表有真實的錢在裡面，
+ * 應該用「取消並退還」而不是直接刪掉。
  */
 export async function deleteMatch(matchId: number) {
 	const own = await db.select().from(markets).where(eq(markets.matchId, matchId));
@@ -591,7 +571,7 @@ export async function deleteMatch(matchId: number) {
 			.limit(1);
 
 		if (placed) {
-			throw new MarketStateError('這個場次已經有人應援，不能刪除。請改用「取消並退款」。');
+			throw new MarketStateError('這個場次已經有人應援，不能刪除。請改用「取消並退還」。');
 		}
 
 		await db.delete(markets).where(eq(markets.matchId, matchId));
@@ -694,7 +674,7 @@ export async function listMatches() {
 	});
 }
 
-/** 取得場次與其所有盤口，供看板與後台使用。 */
+/** 取得場次與其所有應援場，供看板與後台使用。 */
 export async function getMatchWithMarkets(matchId: number) {
 	const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
 	if (!match) return null;
@@ -711,7 +691,7 @@ export async function getMatchWithMarkets(matchId: number) {
 	};
 }
 
-/** 刪除多個場次的所有盤口與下注（僅供測試清理使用）。 */
+/** 刪除多個場次的所有應援場與應援（僅供測試清理使用）。 */
 export async function deleteMarketsForMatches(matchIds: number[]) {
 	if (!matchIds.length) return;
 	const rows = await db

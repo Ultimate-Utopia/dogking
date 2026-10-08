@@ -20,7 +20,7 @@
 </script>
 
 <h1>場次總覽</h1>
-<p class="hint">點任一場次進入控制台。開盤、封盤、判定勝負與派彩都在裡面。</p>
+<p class="hint">點任一場次進入控制台。開放應援、關閉應援、判定勝負與發放都在裡面。</p>
 
 {#if form && 'error' in form && form.error}
 	<div class="err">{form.error}</div>
@@ -32,18 +32,18 @@
 <div class="panel">
 	<p class="hint" style="margin:0 0 12px">
 		<strong>活動開始前按一次「開放全部場次」。</strong>
-		這次的玩法是所有場次一開場就能應援（連還沒確定對手的也能押），
-		主持人在每場開打前約一分鐘進去那一場按「封盤」或設 60 秒倒數。
-		<u>已經封盤或已派彩的場次不會被重新打開。</u>
+		這次的玩法是所有場次一開場就能應援（連還沒確定對手的也能應援），
+		主持人在每場開打前約一分鐘進去那一場按「關閉應援」或設 60 秒倒數。
+		<u>已經關閉應援或已發放的場次不會被重新打開。</u>
 	</p>
 	<form
 		method="POST"
 		action="?/openAll"
 		use:enhance={({ cancel }) => {
-			if (!confirm('要開放所有尚未開盤場次的整場盤嗎？開放後觀眾就能開始應援。')) cancel();
+			if (!confirm('要開放所有還沒開放的場次嗎？開放後觀眾就能開始應援。')) cancel();
 		}}
 	>
-		<button class="b b-go" style="flex:0" type="submit">開放全部場次的整場盤</button>
+		<button class="b b-go" style="flex:0" type="submit">開放全部場次的整場應援</button>
 	</form>
 </div>
 
@@ -64,10 +64,10 @@
 					<span>{m.format}</span>
 					{#if m.isElimination}<span>輸者淘汰</span>{/if}
 					{#if m.marketCount > 0}
-						<span>盤口 {m.marketCount}</span>
+						<span>應援場 {m.marketCount}</span>
 					{/if}
 					{#if m.pooled > 0}
-						<span>彩池 {fmt(m.pooled)}</span>
+						<span>獎池 {fmt(m.pooled)}</span>
 					{/if}
 				</div>
 			</div>

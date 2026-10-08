@@ -34,7 +34,7 @@ export const ROSTER = [
 	{ name: '愛紗公主', role: 'player', doroSlug: 'aisa', channelUrl: 'https://www.youtube.com/@愛紗公主與毬毬Aisa' },
 	{ name: '語風薯薯', role: 'host', roleLabel: '賽事主持', doroSlug: 'shushu', channelUrl: 'https://www.youtube.com/channel/UCLHSj-ZnzmpQlZuUcnXMoVg' },
 	{ name: '可樂月月', role: 'host', roleLabel: '賽事副持', doroSlug: 'yueyue', channelUrl: 'https://www.youtube.com/@colamoonie' },
-	{ name: '艾絲梅亞', role: 'host', roleLabel: '賭盤副台', doroSlug: 'esmeya', channelUrl: 'https://www.youtube.com/@Esmea666' }
+	{ name: '艾絲梅亞', role: 'host', roleLabel: '應援副台', doroSlug: 'esmeya', channelUrl: 'https://www.youtube.com/@Esmea666' }
 ];
 
 /**

@@ -16,7 +16,7 @@
 	/**
 	 * 一筆紀錄的說明文字。
 	 *
-	 * 應援與派彩一定要講出是哪一場哪一局 ——
+	 * 應援與發放一定要講出是哪一場哪一局 ——
 	 * 不然整列都是「應援 −500」，觀眾根本對不上賬。
 	 * note 是後台寫的（訂單編號、兌換券碼等），沒場次時拿它頂。
 	 */
@@ -73,7 +73,7 @@
 </div>
 
 <div class="board">
-	<p style="margin:0 0 14px"><a href="/">← 回賭盤</a></p>
+	<p style="margin:0 0 14px"><a href="/">← 回應援主頁</a></p>
 	<h1 style="font-size:24px;margin:0 0 6px">獲得狗狗幣</h1>
 	<p style="color:var(--muted);margin:0 0 14px;line-height:1.85">
 		在本次指定活動賣場「終焉狗王大賽」購買活動周邊，即可獲贈狗狗幣。<br />

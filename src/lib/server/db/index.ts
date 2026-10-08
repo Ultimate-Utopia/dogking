@@ -25,7 +25,7 @@ if (!env.DATABASE_URL) {
  * 上線後會出現「prepared statement already exists」這類間歇性錯誤，
  * 而且本機測完全測不出來。
  *
- * 交易期間連線不會被換走，所以下注與結算用的 SELECT ... FOR UPDATE
+ * 交易期間連線不會被換走，所以應援與結算用的 SELECT ... FOR UPDATE
  * 在 transaction 模式下依然正確。
  */
 const client = postgres(env.DATABASE_URL, {

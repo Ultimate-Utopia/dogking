@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const matchId = Number(params.id);
 	if (!Number.isInteger(matchId)) error(400, '場次編號無效');
 
-	// 倒數到期的盤口要先變成 locked，否則按「判定勝方」時會因狀態不符而失敗
+	// 倒數到期的應援場要先變成 locked，否則按「判定勝方」時會因狀態不符而失敗
 	await expireLocks();
 
 	const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
@@ -153,8 +153,8 @@ export const actions: Actions = {
 
 		try {
 			const market = await openMarket(Number(params.id), gameNo);
-			await logAdmin(admin.id, '開盤', `盤口 ${market.id}`, { matchId: params.id, gameNo });
-			return { success: gameNo === 0 ? '整場盤已開放應援' : `第 ${gameNo} 局盤已開放應援` };
+			await logAdmin(admin.id, '開放應援', `應援場 ${market.id}`, { matchId: params.id, gameNo });
+			return { success: gameNo === 0 ? '整場應援已開放' : `第 ${gameNo} 局的應援已開放` };
 		} catch (e) {
 			return toFail(e);
 		}
@@ -167,8 +167,8 @@ export const actions: Actions = {
 
 		try {
 			await lockMarket(marketId);
-			await logAdmin(admin.id, '封盤', `盤口 ${marketId}`);
-			return { success: '已封盤，不再接受應援' };
+			await logAdmin(admin.id, '關閉應援', `應援場 ${marketId}`);
+			return { success: '已關閉，不再接受應援' };
 		} catch (e) {
 			return toFail(e);
 		}
@@ -182,8 +182,8 @@ export const actions: Actions = {
 
 		try {
 			await scheduleLock(marketId, seconds);
-			await logAdmin(admin.id, `設定 ${seconds} 秒後封盤`, `盤口 ${marketId}`);
-			return { success: `已設定 ${seconds} 秒後封盤，前台開始倒數` };
+			await logAdmin(admin.id, `設定 ${seconds} 秒後關閉應援`, `應援場 ${marketId}`);
+			return { success: `已設定 ${seconds} 秒後關閉應援，前台開始倒數` };
 		} catch (e) {
 			return toFail(e);
 		}
@@ -199,7 +199,7 @@ export const actions: Actions = {
 
 		try {
 			const result = await settleMarket(marketId, side);
-			await logAdmin(admin.id, '派彩', `盤口 ${marketId}`, result);
+			await logAdmin(admin.id, '發放', `應援場 ${marketId}`, result);
 			redirect(303, `/admin/matches/${params.id}`);
 		} catch (e) {
 			// redirect 是用丟出例外實作的，不能被當成錯誤吞掉
@@ -216,8 +216,8 @@ export const actions: Actions = {
 
 		try {
 			const result = await voidMarket(marketId, reason);
-			await logAdmin(admin.id, '取消並退款', `盤口 ${marketId}`, result);
-			return { success: `已取消並退款 ${result.betsRefunded} 筆，共 ${result.paidOut} 狗狗幣` };
+			await logAdmin(admin.id, '取消並退還', `應援場 ${marketId}`, result);
+			return { success: `已取消並退還 ${result.betsRefunded} 筆，共 ${result.paidOut} 狗狗幣` };
 		} catch (e) {
 			return toFail(e);
 		}

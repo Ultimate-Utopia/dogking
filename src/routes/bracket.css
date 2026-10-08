@@ -87,7 +87,7 @@
 	overflow: hidden;
 	font-size: 13.5px;
 }
-/* 正在開放下注的場次要跳出來 */
+/* 正在開放應援的場次要跳出來 */
 .node.live {
 	border-color: var(--ok);
 	border-width: 2px;

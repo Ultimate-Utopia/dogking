@@ -4,10 +4,10 @@
  * 驗證規格書 §05 的三個保證：
  *   1. 餘額由 ledger 加總得出
  *   2. 餘額不足時拒絕扣款
- *   3. 併發扣款不會造成負餘額（這是下注流程的命脈）
+ *   3. 併發扣款不會造成負餘額（這是應援流程的命脈）
  *
  * 測試會建立臨時使用者，結束後自行清除。
- * 之後實作下注時，這裡應該再加上「彩池分配結算」的測試。
+ * 之後實作應援時，這裡應該再加上「獎池分配結算」的測試。
  */
 
 import { json, error, type Cookies } from '@sveltejs/kit';
@@ -97,7 +97,7 @@ export const GET: RequestHandler = async () => {
 		return uid;
 	};
 
-	/** 建立臨時場次，供盤口測試使用。 */
+	/** 建立臨時場次，供應援場測試使用。 */
 	const makeMatch = async (tag: string) => {
 		const [m] = await db
 			.insert(matches)
@@ -234,9 +234,9 @@ export const GET: RequestHandler = async () => {
 					`凍結後${after === null ? '立即失效' : '仍可登入 —— 有問題'}`
 			});
 		}
-		// ── 6. 彩池分配結算金額正確 ─────────────────────────
+		// ── 6. 獎池分配結算金額正確 ─────────────────────────
 		// 直接照規格書 §05 的算例：藍 40,000 / 紅 60,000，紅方獲勝。
-		// 押紅方 5,000 者應領回 floor(5000 × 100000 / 60000) = 8333。
+		// 應援紅方 5,000 者應領回 floor(5000 × 100000 / 60000) = 8333。
 		{
 			const mid = await makeMatch('payout');
 			const market = await openMarket(mid, 0);
@@ -258,7 +258,7 @@ export const GET: RequestHandler = async () => {
 			const expected = calcPayout(5000, 60000, 100000); // 8333
 
 			results.push({
-				name: '彩池分配結算金額正確（規格書 §05 算例）',
+				name: '獎池分配結算金額正確（規格書 §05 算例）',
 				pass:
 					result.totalPool === 100000 &&
 					expected === 8333 &&
@@ -268,19 +268,19 @@ export const GET: RequestHandler = async () => {
 					result.betsLost === 1,
 				detail:
 					`總池 ${result.totalPool}、` +
-					`賠率 藍 ${odds.blue?.toFixed(2)} / 紅 ${odds.red?.toFixed(2)}、` +
-					`押紅 5000 領回 ${smallBalance}（期望 8333）、` +
-					`押藍者歸零 ${blueBalance === 0}、` +
+					`分配倍率 藍 ${odds.blue?.toFixed(2)} / 紅 ${odds.red?.toFixed(2)}、` +
+					`應援紅方 5000 領回 ${smallBalance}（期望 8333）、` +
+					`應援藍方者歸零 ${blueBalance === 0}、` +
 					`贏 ${result.betsWon} 輸 ${result.betsLost}`
 			});
 		}
 
-		// ── 7. 除不盡時無條件捨去，派彩不超過總池 ───────────
+		// ── 7. 除不盡時無條件捨去，發放不超過總池 ───────────
 		{
 			const mid = await makeMatch('rounding');
 			const market = await openMarket(mid, 0);
 
-			// 藍 1 / 紅 3：紅方賠率 4/3，除不盡
+			// 藍 1 / 紅 3：紅方分配倍率 4/3，除不盡
 			const a = await makeFundedUser('r-a', 1000);
 			const b = await makeFundedUser('r-b', 1000);
 			const c = await makeFundedUser('r-c', 1000);
@@ -298,11 +298,11 @@ export const GET: RequestHandler = async () => {
 			results.push({
 				name: '除不盡時無條件捨去，餘數留在系統',
 				pass: result.paidOut === 399 && result.remainder === 1 && result.paidOut <= result.totalPool,
-				detail: `總池 ${result.totalPool}、派出 ${result.paidOut}、餘數 ${result.remainder}（派彩絕不可超過總池）`
+				detail: `總池 ${result.totalPool}、派出 ${result.paidOut}、餘數 ${result.remainder}（發放絕不可超過總池）`
 			});
 		}
 
-		// ── 8. 贏方無人下注 → 全額退款 ──────────────────────
+		// ── 8. 贏方無人應援 → 獎池由系統回收 ────────────────
 		{
 			const mid = await makeMatch('noWinner');
 			const market = await openMarket(mid, 0);
@@ -310,17 +310,23 @@ export const GET: RequestHandler = async () => {
 
 			await placeBet({ userId: only, marketId: market.id, side: 'blue', amount: 700, idempotencyKey: crypto.randomUUID() });
 			await lockMarket(market.id);
-			const result = await settleMarket(market.id, 'red'); // 紅方沒人押卻贏
+			const result = await settleMarket(market.id, 'red'); // 紅方沒有人應援卻贏
 
 			const balance = await getBalance(only);
 			results.push({
-				name: '贏方無人下注時全額退款',
-				pass: result.outcome === 'refunded' && balance === 1000,
-				detail: `結果 ${result.outcome}、退款 ${result.betsRefunded} 筆、餘額回到 ${balance}（期望 1000）`
+				name: '贏方無人應援時獎池由系統回收，不退還',
+				pass:
+					result.outcome === 'settled' &&
+					result.paidOut === 0 &&
+					result.remainder === 700 &&
+					balance === 300,
+				detail:
+					`結果 ${result.outcome}、派出 ${result.paidOut}、系統回收 ${result.remainder}、` +
+					`餘額 ${balance}（期望 300，投入的 700 不退還）`
 			});
 		}
 
-		// ── 9. 取消盤口 → 全額退款（平局／退賽／爭議）───────
+		// ── 9. 取消應援場 → 全額退還（平局／退賽／爭議）───────
 		{
 			const mid = await makeMatch('void');
 			const market = await openMarket(mid, 0);
@@ -335,13 +341,13 @@ export const GET: RequestHandler = async () => {
 			const by = await getBalance(y);
 
 			results.push({
-				name: '取消盤口時全額退款',
+				name: '取消應援場時全額退還',
 				pass: result.betsRefunded === 2 && bx === 1000 && by === 1000,
-				detail: `退款 ${result.betsRefunded} 筆、雙方餘額 ${bx} / ${by}（皆期望 1000）`
+				detail: `退還 ${result.betsRefunded} 筆、雙方餘額 ${bx} / ${by}（皆期望 1000）`
 			});
 		}
 
-		// ── 10. 封盤後不能下注（伺服器時間為準）─────────────
+		// ── 10. 關閉應援後不能應援（伺服器時間為準）─────────────
 		{
 			const mid = await makeMatch('closed');
 			const market = await openMarket(mid, 0);
@@ -358,13 +364,13 @@ export const GET: RequestHandler = async () => {
 
 			const balance = await getBalance(u);
 			results.push({
-				name: '封盤後不能下注',
+				name: '關閉應援後不能應援',
 				pass: rejected && balance === 1000,
-				detail: rejected ? `已拒絕，餘額未變動（${balance}）` : '竟然下注成功 —— 有問題'
+				detail: rejected ? `已拒絕，餘額未變動（${balance}）` : '竟然應援成功 —— 有問題'
 			});
 		}
 
-		// ── 11. 冪等鍵防止重複下注 ──────────────────────────
+		// ── 11. 冪等鍵防止重複應援 ──────────────────────────
 		{
 			const mid = await makeMatch('idem');
 			const market = await openMarket(mid, 0);
@@ -376,13 +382,13 @@ export const GET: RequestHandler = async () => {
 
 			const balance = await getBalance(u);
 			results.push({
-				name: '冪等鍵防止重複下注',
+				name: '冪等鍵防止重複應援',
 				pass: first.id === second.id && balance === 750,
 				detail: `兩次呼叫回傳同一筆注（${first.id === second.id}），只扣一次款，餘額 ${balance}（期望 750）`
 			});
 		}
 
-		// ── 12. 未封盤不能結算，且不能重複結算 ──────────────
+		// ── 12. 未關閉應援不能結算，且不能重複結算 ──────────────
 		{
 			const mid = await makeMatch('guard');
 			const market = await openMarket(mid, 0);
@@ -408,17 +414,17 @@ export const GET: RequestHandler = async () => {
 
 			const balance = await getBalance(u);
 			results.push({
-				name: '未封盤不能結算，且不能重複結算',
+				name: '未關閉應援不能結算，且不能重複結算',
 				pass: blockedWhileOpen && blockedDouble && balance === 1000,
 				detail:
 					`開放中結算${blockedWhileOpen ? '已擋下' : '未擋 —— 有問題'}、` +
 					`重複結算${blockedDouble ? '已擋下' : '未擋 —— 有問題'}、` +
-					`餘額 ${balance}（只派彩一次，期望 1000）`
+					`餘額 ${balance}（只發放一次，期望 1000）`
 			});
 		}
-		// ── 13. 倒數到期會自動封盤 ──────────────────────────
+		// ── 13. 倒數到期會自動關閉 ──────────────────────────
 		// scheduleLock 只寫入時間戳，沒有排程器會改狀態。
-		// 若少了 expireLocks()：前台會繼續顯示下注介面，
+		// 若少了 expireLocks()：前台會繼續顯示應援介面，
 		// 而且 settleMarket 要求 state=locked，後台反而結算不了。
 		{
 			const mid = await makeMatch('expire');
@@ -426,14 +432,14 @@ export const GET: RequestHandler = async () => {
 			const u = await makeFundedUser('expire-u', 1000);
 			await placeBet({ userId: u, marketId: market.id, side: 'blue', amount: 100, idempotencyKey: crypto.randomUUID() });
 
-			// 設定成 1 秒前就該封盤
+			// 設定成 1 秒前就該關閉應援
 			await scheduleLock(market.id, -1);
 			const [before] = await db.select().from(markets).where(eq(markets.id, market.id));
 
 			const expired = await expireLocks();
 			const [after] = await db.select().from(markets).where(eq(markets.id, market.id));
 
-			// 過期後必須能直接結算，不需要人工再按一次封盤
+			// 過期後必須能直接結算，不需要人工再按一次關閉應援
 			let settled = false;
 			try {
 				await settleMarket(market.id, 'blue');
@@ -443,7 +449,7 @@ export const GET: RequestHandler = async () => {
 			}
 
 			results.push({
-				name: '倒數到期自動封盤，且可直接結算',
+				name: '倒數到期自動關閉，且可直接結算',
 				pass: before.state === 'open' && expired >= 1 && after.state === 'locked' && settled,
 				detail:
 					`到期前 ${before.state} → 到期後 ${after.state}（期望 locked）、` +
@@ -451,7 +457,7 @@ export const GET: RequestHandler = async () => {
 			});
 		}
 
-		// ── 14. 倒數到期後不能再下注 ────────────────────────
+		// ── 14. 倒數到期後不能再應援 ────────────────────────
 		{
 			const mid = await makeMatch('expire-bet');
 			const market = await openMarket(mid, 0);
@@ -467,9 +473,9 @@ export const GET: RequestHandler = async () => {
 
 			const balance = await getBalance(u);
 			results.push({
-				name: '倒數到期後不能再下注',
+				name: '倒數到期後不能再應援',
 				pass: rejected && balance === 1000,
-				detail: rejected ? `已拒絕，餘額未變動（${balance}）` : '竟然下注成功 —— 有問題'
+				detail: rejected ? `已拒絕，餘額未變動（${balance}）` : '竟然應援成功 —— 有問題'
 			});
 		}
 		// ── 15. 兌換券只能用一次 ────────────────────────────

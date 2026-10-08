@@ -7,11 +7,11 @@ import { calcOdds, expireLocks } from '$lib/server/tournament';
 import { requireAdmin } from '$lib/server/admin';
 
 /**
- * 後台用的即時盤口狀態。
+ * 後台用的即時應援場狀態。
  *
  * 後台頁面是表單為主，不能整頁重新載入 —— 操作員可能正在輸入比分，
  * 資料一更新輸入框就被蓋掉。所以另開這個唯讀端點，
- * 只更新倒數與彩池的顯示，表單完全不碰。
+ * 只更新倒數與獎池的顯示，表單完全不碰。
  *
  * 內容隨管理員權限而異且需要即時，因此不快取。
  */

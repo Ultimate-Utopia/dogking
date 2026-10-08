@@ -1,5 +1,5 @@
 /**
- * 清除下注資料，回到「還沒開始下注」的狀態。
+ * 清除應援資料，回到「還沒開始應援」的狀態。
  *
  * 主要用途：練習賽彩排完，要把正式站清乾淨再開始真正的活動。
  *
@@ -9,8 +9,8 @@
  *   node scripts/reset.mjs --url "postgres://..."   指定資料庫
  *
  * ── 會刪除 ──────────────────────────────────────────────
- *   markets           所有盤口
- *   bets              所有注單
+ *   markets           所有應援場
+ *   bets              所有應援紀錄
  *   ledger            只刪 bet / payout / refund 三種
  *   matches 的比分與對戰組合（除非加 --keep-matches）
  *
@@ -86,9 +86,9 @@ try {
 			(SELECT COUNT(*) FROM users) AS users`;
 
 	console.log('  ── 將清除 ──');
-	console.log(`    盤口              ${fmt(before.markets)}`);
-	console.log(`    注單              ${fmt(before.bets)}`);
-	console.log(`    帳本（下注相關）  ${fmt(before.ledger_bet)}`);
+	console.log(`    應援場              ${fmt(before.markets)}`);
+	console.log(`    應援紀錄              ${fmt(before.bets)}`);
+	console.log(`    帳本（應援相關）  ${fmt(before.ledger_bet)}`);
 	if (!KEEP_MATCHES) console.log(`    場次的比分與對戰  ${fmt(before.matches_dirty)} 場`);
 	console.log('');
 	console.log('  ── 保留 ──');
@@ -162,7 +162,7 @@ try {
 
 	console.log('');
 	console.log('  ── 完成 ──');
-	console.log(`    盤口 ${now.markets}　注單 ${now.bets}　下注帳本 ${now.ledger_bet}`);
+	console.log(`    應援場 ${now.markets}　應援紀錄 ${now.bets}　應援帳本 ${now.ledger_bet}`);
 	console.log('');
 } finally {
 	await sql.end({ timeout: 5 });
