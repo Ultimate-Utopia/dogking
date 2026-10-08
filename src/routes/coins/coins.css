@@ -235,3 +235,35 @@
 		text-align: left;
 	}
 }
+
+/* 前往活動賣場。主辦方要求要有明顯的入口，不是藏在文字裡的連結 */
+.shop-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 15px;
+	font-weight: 700;
+	text-decoration: none;
+	padding: 11px 18px;
+	border-radius: 8px;
+	background: var(--ok);
+	color: #fff;
+}
+.shop-link:hover {
+	filter: brightness(1.08);
+}
+
+/* 注意事項的編號清單 */
+.note-list {
+	margin: 0;
+	padding-left: 22px;
+	font-size: 14px;
+	line-height: 1.85;
+	color: var(--muted);
+}
+.note-list li {
+	margin-bottom: 6px;
+}
+.note-list li:last-child {
+	margin-bottom: 0;
+}

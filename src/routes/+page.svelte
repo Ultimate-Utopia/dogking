@@ -8,6 +8,7 @@
 	import IdCard from '$lib/components/IdCard.svelte';
 	import PrizeCard from '$lib/components/PrizeCard.svelte';
 	import { sanitizeStake } from '$lib/bet-amount';
+	import StreamStrip from '$lib/components/StreamStrip.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -641,6 +642,17 @@
 		<h2>賽程樹</h2>
 		<Bracket {bracket} />
 	</div>
+
+	<!-- ── 選手實況（後台 /admin/streams 編輯）───────── -->
+	{#if data.streams.length}
+		<div class="card2" style="margin-bottom:16px">
+			<h2>選手實況回顧</h2>
+			<p class="bars-note">
+				先看看選手過去的表現，再決定要應援誰。按下縮圖才會開始播放。
+			</p>
+			<StreamStrip streams={data.streams} />
+		</div>
+	{/if}
 
 	<!-- ── 所有場次：提前下注 ──────────────────────── -->
 	{#if board.bars.length}

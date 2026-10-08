@@ -3,6 +3,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { getBoardState, getLeaderboard, getRoster, getBracket } from '$lib/server/board';
 import { placeBet } from '$lib/server/tournament';
 import { listPrizes } from '$lib/server/prizes';
+import { listStreams } from '$lib/server/streams';
 import { InsufficientBalanceError } from '$lib/server/ledger';
 
 /**
@@ -19,13 +20,14 @@ import { InsufficientBalanceError } from '$lib/server/ledger';
  * 代價是登入狀態會在 JS 載入後才出現，換來的是整站扛得住活動當天的流量。
  */
 export const load: PageServerLoad = async ({ setHeaders }) => {
-	const [board, leaderboard, roster, bracket, prizes] = await Promise.all([
+	const [board, leaderboard, roster, bracket, prizes, streams] = await Promise.all([
 		getBoardState(),
 		getLeaderboard(5),
 		getRoster(),
 		getBracket(),
 		// 公開資料。後台改完最多幾秒就會出現在首頁（同一份 3 秒快取）
-		listPrizes()
+		listPrizes(),
+		listStreams()
 	]);
 
 	/**
@@ -41,7 +43,7 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
 	 */
 	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=600' });
 
-	return { board, leaderboard, roster, bracket, prizes };
+	return { board, leaderboard, roster, bracket, prizes, streams };
 };
 
 export const actions: Actions = {

@@ -57,6 +57,13 @@
       "when": 1789321497319,
       "tag": "0007_prizes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791475189771,
+      "tag": "0008_streams",
+      "breakpoints": true
     }
   ]
 }

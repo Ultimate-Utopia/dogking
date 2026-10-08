@@ -377,3 +377,22 @@ export const prizes = pgTable('prizes', {
 
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+// ─────────────────────────────────────────────────────────
+// streams —— 選手過去的實況影片，後台可編輯。
+//
+// 目的是讓觀眾在應援前先看看選手的表現，所以只存 YouTube 影片 ID，
+// 不存完整網址：後台貼什麼形式的連結都會先解析成 ID（見 $lib/youtube.ts），
+// 前台再自己組嵌入網址。這樣資料乾淨，也不會把追蹤參數一起存進來。
+// ─────────────────────────────────────────────────────────
+export const streams = pgTable('streams', {
+	id: serial('id').primaryKey(),
+	sortOrder: integer('sort_order').notNull().default(0),
+	/** YouTube 影片 ID（11 碼） */
+	videoId: text('video_id').notNull(),
+	title: text('title').notNull(),
+	/** 這支影片是哪位參賽者的。null 代表沒特別指定（例如宣傳片） */
+	participantId: integer('participant_id').references(() => participants.id),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});

@@ -314,7 +314,7 @@ export async function commitImport(platform: string, rows: ImportRow[], adminUse
 					userId: r.userId!,
 					type: 'purchase',
 					amount: r.chips,
-					note: `周邊訂單 ${platform} ${order.orderRef}`
+					note: `商品消費 ${platform} ${order.orderRef}`
 				});
 			});
 			credited++;

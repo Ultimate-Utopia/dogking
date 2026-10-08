@@ -95,8 +95,9 @@ export async function getHistory(userId: string, limit = 50) {
 /** 帳本類型對觀眾的說法。資料庫存英文，畫面不該露出來。 */
 const TYPE_LABEL: Record<string, string> = {
 	signup: '註冊贈幣',
-	purchase: '周邊發幣',
-	bet: '下注',
+	// 用詞依主辦方要求：面對觀眾一律講「應援」「贈幣」，不用「發幣」「下注」
+	purchase: '商品消費贈幣',
+	bet: '應援',
 	payout: '派彩',
 	refund: '退款',
 	adjust: '人工調整'

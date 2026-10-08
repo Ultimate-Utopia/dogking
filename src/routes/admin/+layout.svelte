@@ -16,6 +16,7 @@
 			<a href="/admin/coins">狗狗幣發放</a>
 			<a href="/admin/handbook">發幣手冊</a>
 			<a href="/admin/prizes">獎品設定</a>
+			<a href="/admin/streams">實況影片</a>
 			{data.admin.displayName}
 			<a href="/">回前台</a>
 		</div>
