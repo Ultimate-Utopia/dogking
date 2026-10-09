@@ -16,6 +16,7 @@ import {
 	detectFormat,
 	parseMyship,
 	parseEcpay,
+	ecpayGoodsAmount,
 	ecpayShops,
 	parseByColumns,
 	stripUnusedColumns
@@ -175,10 +176,41 @@ t('只留賽事賣場的訂單', () => {
 	assert.equal(ecpay.find((p) => p.orderRef === '99999999'), undefined);
 });
 
-t('狗狗幣金額＝訂單總金額 − 運費', () => {
-	assert.equal(eBy('11349648').totalTwd, 1415);
-	assert.equal(eBy('11349648').amountTwd, 1350);
+t('沒滿免運門檻 → 狗狗幣金額＝訂單總金額 − 運費', () => {
+	assert.equal(eBy('11288966').totalTwd, 765);
+	assert.equal(eBy('11288966').amountTwd, 700);
 });
+
+t('滿千免運 → 不扣運費（扣了就是扣兩次）', () => {
+	// 主辦方 10-10 回報的狀況：小計 3,150、免運折抵 −65、運費 65，實付 3,150。
+	// 匯出檔的運費欄仍然是 65，照扣就會少發 6,500 狗狗幣。
+	assert.equal(eBy('11349648').totalTwd, 1415);
+	assert.equal(eBy('11349648').amountTwd, 1415);
+});
+
+console.log('綠界：運費與免運的推算');
+
+t('免運判定：總金額 − 運費 ≥ 1000 就是免運，不扣', () => {
+	assert.equal(ecpayGoodsAmount(3150, 65), 3150);
+	assert.equal(ecpayGoodsAmount(1415, 65), 1415);
+	// 剛好在門檻上
+	assert.equal(ecpayGoodsAmount(1065, 65), 1065);
+});
+
+t('沒免運就扣掉運費', () => {
+	assert.equal(ecpayGoodsAmount(165, 65), 100);
+	assert.equal(ecpayGoodsAmount(765, 65), 700);
+	// 總金額 − 運費 = 999，差一塊就達門檻
+	assert.equal(ecpayGoodsAmount(1064, 65), 999);
+});
+
+t('運費 0 或空白時原封不動', () => {
+	assert.equal(ecpayGoodsAmount(900, 0), 900);
+	assert.equal(ecpayGoodsAmount(500, 0), 500);
+});
+
+t('金額讀不出來時維持 NaN，不要變成數字', () =>
+	assert.equal(Number.isNaN(ecpayGoodsAmount(NaN, 65)), true));
 
 t('運費 0 或空白都當 0，不會算成 NaN', () => {
 	assert.equal(eBy('10829378').amountTwd, 900);

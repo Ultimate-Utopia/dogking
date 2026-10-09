@@ -956,3 +956,24 @@ a.member:hover {
 .bar-bet.off:hover {
 	background: transparent;
 }
+
+/* ── 活動注意事項 ─────────────────────────────────────
+   18 條條文，是對觀眾的規則承諾，所以不收合、一律攤開。
+   字小一點、行距拉開，長文在手機上才讀得下去。 */
+.foot-h {
+	margin: 0 0 10px;
+	font-size: 14px;
+	color: var(--ink);
+}
+.foot-list {
+	margin: 0;
+	padding-left: 1.4em;
+	display: grid;
+	gap: 7px;
+	font-size: 12.5px;
+	line-height: 1.75;
+	text-align: left;
+}
+.foot-list li {
+	padding-left: 2px;
+}

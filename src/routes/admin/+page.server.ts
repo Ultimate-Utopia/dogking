@@ -7,7 +7,7 @@ export const load: PageServerLoad = async () => {
 	const [matches, logs, predictions] = await Promise.all([
 		listMatches(),
 		recentAdminLogs(20),
-		predictionLeaderboard(10)
+		predictionLeaderboard()
 	]);
 	return { matches, logs, predictions };
 };

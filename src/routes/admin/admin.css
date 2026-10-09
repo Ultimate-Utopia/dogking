@@ -498,3 +498,8 @@ table.pred td.up {
 table.pred td.down {
 	color: var(--red);
 }
+
+/* 並列第一名整列標起來 —— 直播最後要從這幾位裡抽一位 */
+table.pred tr.tied td {
+	background: color-mix(in srgb, var(--ok) 10%, transparent);
+}

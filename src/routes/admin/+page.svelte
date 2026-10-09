@@ -112,8 +112,10 @@
 
 <h2>預測戰績</h2>
 <p class="hint">
-	猜中的場次最多的前 10 位。只算<b>已結算</b>的應援 —— 還沒開賽的不算（不然剛應援的人看起來很準），
-	整場取消退還的也不算（那不是猜錯）。次數相同時投入多的排前面。
+	依猜中場次數排序，<b>全部列出</b>（{data.predictions.length} 人）。名字就是 Discord 顯示名稱。
+	只算<b>已結算</b>的應援 —— 還沒開賽的不算（不然剛應援的人看起來很準），
+	整場取消退還的也不算（那不是猜錯）。
+	<b>不論投入多少、什麼時候應援，猜中一次就是一次</b>，所以次數相同即為並列，抽獎時機會一樣。
 </p>
 {#if data.predictions.length === 0}
 	<p class="hint">還沒有任何已結算的應援。</p>
@@ -122,8 +124,8 @@
 		<table class="pred">
 			<thead>
 				<tr>
-					<th>#</th>
-					<th>觀眾</th>
+					<th>名次</th>
+					<th>觀眾（Discord）</th>
 					<th class="n">猜中</th>
 					<th class="n">已結算</th>
 					<th class="n">命中率</th>
@@ -133,9 +135,9 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each data.predictions as p, i (p.displayName)}
-					<tr>
-						<td>{i + 1}</td>
+				{#each data.predictions as p (p.displayName)}
+					<tr class:tied={p.rank === 1}>
+						<td>{p.rank}</td>
 						<td>{p.displayName}</td>
 						<td class="n"><b>{p.won}</b></td>
 						<td class="n">{p.total}</td>

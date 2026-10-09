@@ -183,16 +183,15 @@
 						{#if current.blueDoro}
 							<img class="art" src="/participants/{current.blueDoro}-sm.webp" alt="" />
 						{/if}
+						<!-- 主辦方 10-10：倍率拿掉。投入量與比例在下面那條長條上，不重複寫 -->
 						<div class="team-txt">
 							<div class="team-name">{current.blueName ?? '藍方'}</div>
-							<div class="team-odds">{active.oddsBlue ? active.oddsBlue.toFixed(2) : '—'}</div>
 						</div>
 					</div>
 					<div class="score">{current.scoreBlue}<span>:</span>{current.scoreRed}</div>
 					<div class="team red">
 						<div class="team-txt">
 							<div class="team-name">{current.redName ?? '紅方'}</div>
-							<div class="team-odds">{active.oddsRed ? active.oddsRed.toFixed(2) : '—'}</div>
 						</div>
 						{#if current.redDoro}
 							<img class="art flip" src="/participants/{current.redDoro}-sm.webp" alt="" />

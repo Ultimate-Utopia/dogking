@@ -253,7 +253,11 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
  *
  *   ・第 1 列就是標題，一張訂單一列
  *   ・代碼填在「買家備註」
- *   ・「訂單總金額」含運費，另有「運費」欄 —— 狗狗幣不含運費，要扣掉（運費可能是 0）
+ *   ・「訂單總金額」是買家<strong>實付</strong>的錢，運費與運費折抵都算進去了。
+ *     另有「運費」欄 —— 狗狗幣不含運費，所以通常要扣掉（運費可能是 0）。
+ *     ⚠️ 但賣場有「滿一千元免運」活動，免運的訂單「運費」欄<u>仍然填 65</u>，
+ *     只是另外有一筆 −65 的折抵，兩者在總金額裡互相抵銷。照著扣就會重複扣，
+ *     見下面 ecpayGoodsAmount 的說明。
  *   ・⚠️ 只能用 Excel 匯出。綠界的 CSV 匯出欄位會亂序，不能用
  *   ・欄位順序在不同版本的匯出檔不一樣（09-21 與 09-23 兩份就不同），
  *     所以一律用「欄位名稱」找欄，不寫死第幾欄
@@ -319,6 +323,45 @@ export function ecpayShops(rows: string[][]): { name: string; count: number }[] 
 /**
  * @param shop 只保留賣場名稱含這段文字的訂單。空字串代表不過濾。
  */
+/** 賣場的免運門檻。商品小計達到這個數字就不收運費（「滿一千元免運」）。 */
+export const ECPAY_FREE_SHIPPING_MIN = 1000;
+
+/**
+ * 從「訂單總金額」與「運費」推回商品金額（＝要發狗狗幣的金額）。
+ *
+ * 主辦方 10-10 回報重複扣運費。實際的訂單長這樣：
+ *
+ *     小計 3,150　｜　滿一千免運 −65　｜　運費 65　→　實付 3,150
+ *     匯出檔：運費 65、訂單總金額 3,150
+ *
+ * 總金額已經是實付金額（折抵算進去了），再扣一次 65 就等於扣兩次運費。
+ *
+ * ── 怎麼判斷這張單到底有沒有付運費 ─────────────────
+ * 匯出檔沒有折抵欄位，只有「運費」與「總金額」，所以要用免運規則反推：
+ *
+ *   ・設 net = 總金額 − 運費。若 net ≥ 1000，那麼「有付運費」這個假設
+ *     會推出商品小計 = net ≥ 1000 —— 但小計滿 1000 就會自動免運，矛盾。
+ *     所以這張單一定是免運的，商品金額 = 總金額。
+ *   ・若 net < 1000，正常情況就是有付運費，商品金額 = net。
+ *
+ * ⚠️ net < 1000 時其實還有另一種可能：免運且小計落在 1000～1065 之間
+ * （例如小計剛好 1,000，總金額 1,000，net 935）。這種單會少算 65 元
+ * ＝少發 6,500 狗狗幣。<u>刻意選少算</u> —— 少發可以事後開兌換券補，
+ * 多發的幣可能已經被應援出去，收不回來。
+ *
+ * ⚠️ 這整套推論的前提是「免運活動對賣場所有訂單都有效」。
+ * 若活動有起訖時間、或只對部分運送方式有效，活動開始前的訂單就可能
+ * 真的付了運費又滿 1,000，那會多發 6,500 幣。要完全不猜，得請主辦方
+ * 匯出時帶上折抵欄位（綠界訂單明細若有「折扣金額」之類的欄位就能直接用）。
+ */
+export function ecpayGoodsAmount(total: number, shipping: number): number {
+	if (!Number.isFinite(total)) return NaN;
+	if (!shipping) return total;
+
+	const net = total - shipping;
+	return net >= ECPAY_FREE_SHIPPING_MIN ? total : net;
+}
+
 export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedOrder[] {
 	const h = findEcpayHeader(rows);
 	if (h < 0) return [];
@@ -333,6 +376,7 @@ export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedO
 	const cShip = col('運費');
 	const cTotal = col('訂單總金額');
 	const cNote = col('買家備註');
+	// 這份檔案裡沒有折抵欄位，只能從金額推回去，見 ecpayGoodsAmount
 	const cShop = col('賣場名稱');
 
 	const out: ParsedOrder[] = [];
@@ -347,7 +391,7 @@ export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedO
 		const total = money(r[cTotal]);
 		// 運費可能是 0 或空白，兩種都當 0
 		const shipping = money(r[cShip]) || 0;
-		const amountTwd = Number.isFinite(total) ? total - shipping : NaN;
+		const amountTwd = ecpayGoodsAmount(total, shipping);
 
 		let rawCode = cNote >= 0 ? (r[cNote] ?? '').trim() : '';
 		if (rawCode === '-') rawCode = '';

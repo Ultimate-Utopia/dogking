@@ -235,14 +235,6 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.team-odds {
-	font-family: var(--o-mono);
-	font-size: 40px;
-	font-weight: 800;
-	font-variant-numeric: tabular-nums;
-	line-height: 1.05;
-	text-shadow: 0 3px 10px rgba(0, 0, 0, 0.8);
-}
 
 .score {
 	font-family: var(--o-mono);
