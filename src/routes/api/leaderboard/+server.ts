@@ -7,7 +7,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 	const rows = await getLeaderboard(5);
 
 	setHeaders({
-		'Cache-Control': 'public, max-age=60, stale-while-revalidate=600'
+		'Cache-Control': 'public, max-age=60, stale-while-revalidate=60'
 	});
 
 	return json({ rows });

@@ -28,6 +28,19 @@
 		return h.note ?? '';
 	}
 
+	/**
+	 * 陣營與選手。主辦方 10-10 的回饋：「會有失憶觀眾」——
+	 * 隔了幾小時回來看紀錄，光是「第 6 場 −100」看不出自己押了哪一邊。
+	 * 發放只會發給押中的人，所以發放那一筆的陣營就是獲勝方。
+	 */
+	function sideText(h: Row) {
+		const side = h.side === 'blue' ? '藍方' : '紅方';
+		const who = h.sideName ? `${side} ${h.sideName}` : side;
+		if (h.type === 'payout') return `${who} 獲勝`;
+		if (h.type === 'refund') return `${who}・已退還`;
+		return `應援 ${who}`;
+	}
+
 	/** 應援是支出，人工調整用中性色提醒要多看一眼，其餘都是入帳。 */
 	function tagClass(type: string) {
 		if (type === 'bet') return 'down';
@@ -157,7 +170,10 @@
 				{#each data.history as h (h.id)}
 					<div class="hist-row">
 						<span class="hist-tag {tagClass(h.type)}">{h.label}</span>
-						<span class="hist-what">{describe(h)}</span>
+						<span class="hist-what">
+							<span class="what-main">{describe(h)}</span>
+							{#if h.side}<span class="hist-side {h.side}">{sideText(h)}</span>{/if}
+						</span>
 						<span class="hist-amt {h.amount > 0 ? 'up' : h.amount < 0 ? 'down' : ''}">
 							{h.amount > 0 ? '+' : ''}{fmt(h.amount)}
 						</span>

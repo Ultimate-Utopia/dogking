@@ -471,17 +471,6 @@
 						{/if}
 					</div>
 
-					<div class="odds">
-						<div class="odd b">
-							<div class="lab">{c.blueName ?? '藍方'}</div>
-							<div class="val">{m.oddsBlue ? m.oddsBlue.toFixed(2) : '—'}</div>
-						</div>
-						<div class="odd r">
-							<div class="lab">{c.redName ?? '紅方'}</div>
-							<div class="val">{m.oddsRed ? m.oddsRed.toFixed(2) : '—'}</div>
-						</div>
-					</div>
-
 					<div class="split">
 						{#if m.total === 0}
 							<div class="none">尚無人應援</div>
@@ -490,10 +479,12 @@
 							{#if m.poolRed > 0}<div class="sr" style="flex:{m.poolRed}">{fmt(m.poolRed)}</div>{/if}
 						{/if}
 					</div>
+					<!-- 主辦方 10-10 要求：倍率的大方塊拿掉，只留這條比例長條。
+					     陣營名字改放在長條兩端，不然卡片上就看不出哪邊是誰。 -->
 					<div class="split-legend">
-						<span>{m.total > 0 ? Math.round((m.poolBlue / m.total) * 100) : 0}%</span>
+						<span class="sl b">{c.blueName ?? '藍方'}　{m.total > 0 ? Math.round((m.poolBlue / m.total) * 100) : 0}%</span>
 						<span>總獎池 {fmt(m.total)}</span>
-						<span>{m.total > 0 ? Math.round((m.poolRed / m.total) * 100) : 0}%</span>
+						<span class="sl r">{m.total > 0 ? Math.round((m.poolRed / m.total) * 100) : 0}%　{c.redName ?? '紅方'}</span>
 					</div>
 
 					{#if user}

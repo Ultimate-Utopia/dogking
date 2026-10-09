@@ -12,7 +12,10 @@ import { getBracket } from '$lib/server/board';
 export const GET: RequestHandler = async ({ setHeaders }) => {
 	const bracket = await getBracket();
 
-	setHeaders({ 'Cache-Control': 'public, max-age=15, stale-while-revalidate=600' });
+	// 賽程樹對「舊資料」最敏感 —— 判出勝負後晉級的人會被填進下一場，
+	// 送到舊內容時那一格的名字與立繪會整個消失（都在 {#if} 裡）。
+	// 見 src/routes/+page.server.ts 對 stale-while-revalidate 的說明。
+	setHeaders({ 'Cache-Control': 'public, max-age=15, stale-while-revalidate=60' });
 
 	return json(bracket);
 };

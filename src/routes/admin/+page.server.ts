@@ -1,11 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { listMatches, createMatch, openAllMatchMarkets } from '$lib/server/tournament';
-import { recentAdminLogs, requireAdmin, logAdmin } from '$lib/server/admin';
+import { predictionLeaderboard, recentAdminLogs, requireAdmin, logAdmin } from '$lib/server/admin';
 
 export const load: PageServerLoad = async () => {
-	const [matches, logs] = await Promise.all([listMatches(), recentAdminLogs(20)]);
-	return { matches, logs };
+	const [matches, logs, predictions] = await Promise.all([
+		listMatches(),
+		recentAdminLogs(20),
+		predictionLeaderboard(10)
+	]);
+	return { matches, logs, predictions };
 };
 
 export const actions: Actions = {

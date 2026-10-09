@@ -110,6 +110,48 @@
 	</form>
 </div>
 
+<h2>預測戰績</h2>
+<p class="hint">
+	猜中的場次最多的前 10 位。只算<b>已結算</b>的應援 —— 還沒開賽的不算（不然剛應援的人看起來很準），
+	整場取消退還的也不算（那不是猜錯）。次數相同時投入多的排前面。
+</p>
+{#if data.predictions.length === 0}
+	<p class="hint">還沒有任何已結算的應援。</p>
+{:else}
+	<div class="panel" style="overflow-x:auto">
+		<table class="pred">
+			<thead>
+				<tr>
+					<th>#</th>
+					<th>觀眾</th>
+					<th class="n">猜中</th>
+					<th class="n">已結算</th>
+					<th class="n">命中率</th>
+					<th class="n">投入</th>
+					<th class="n">領回</th>
+					<th class="n">淨損益</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each data.predictions as p, i (p.displayName)}
+					<tr>
+						<td>{i + 1}</td>
+						<td>{p.displayName}</td>
+						<td class="n"><b>{p.won}</b></td>
+						<td class="n">{p.total}</td>
+						<td class="n">{p.rate}%</td>
+						<td class="n">{fmt(p.staked)}</td>
+						<td class="n">{fmt(p.returned)}</td>
+						<td class="n" class:up={p.net > 0} class:down={p.net < 0}>
+							{p.net > 0 ? '+' : ''}{fmt(p.net)}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
+
 <h2>近期操作紀錄</h2>
 {#if data.logs.length === 0}
 	<p class="hint">還沒有任何操作。</p>

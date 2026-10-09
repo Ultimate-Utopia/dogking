@@ -181,13 +181,39 @@
 	color: var(--blue);
 }
 
+/* 說明欄放得下兩段：場次，以及陣營標示。
+   窄螢幕時陣營標示會折到第二行 —— 它是這一列最重要的資訊，不能被截掉。 */
 .hist-what {
 	grid-area: what;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+	line-height: 1.45;
+	color: var(--muted);
+}
+.hist-what .what-main {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: var(--muted);
+}
+
+.hist-side {
+	padding: 1px 7px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 700;
+	white-space: nowrap;
+}
+.hist-side.blue {
+	background: color-mix(in srgb, var(--blue) 15%, transparent);
+	color: var(--blue);
+}
+.hist-side.red {
+	background: color-mix(in srgb, var(--red) 15%, transparent);
+	color: var(--red);
 }
 
 .hist-amt {

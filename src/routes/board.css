@@ -196,37 +196,6 @@
 	font-weight: 700;
 }
 
-/* 分配倍率 */
-.odds {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 10px;
-	margin-bottom: 12px;
-}
-.odd {
-	padding: 12px 14px;
-	border-radius: 8px;
-	color: #fff;
-}
-.odd.b {
-	background: var(--blue);
-}
-.odd.r {
-	background: var(--red);
-	text-align: right;
-}
-.odd .lab {
-	font-size: 12px;
-	opacity: 0.85;
-}
-.odd .val {
-	font-family: var(--mono);
-	font-size: 25px;
-	font-variant-numeric: tabular-nums;
-	font-weight: 700;
-	line-height: 1.2;
-}
-
 /* 獎池佔比條 */
 .split {
 	display: flex;
@@ -265,6 +234,25 @@
 	color: var(--muted);
 	margin-top: 6px;
 	font-variant-numeric: tabular-nums;
+	gap: 10px;
+}
+
+/* 長條兩端的陣營名字。名字過長時截斷，中間的總獎池永遠要看得到。 */
+.split-legend .sl {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: inherit;
+	font-size: 12.5px;
+	font-weight: 700;
+}
+.split-legend .sl.b {
+	color: var(--blue);
+}
+.split-legend .sl.r {
+	color: var(--red);
+	text-align: right;
 }
 
 /* ── 我的應援（應援場卡內）────────────────────────────

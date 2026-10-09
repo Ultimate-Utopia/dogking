@@ -31,17 +31,22 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
 	]);
 
 	/**
-	 * stale-while-revalidate 刻意設得很長。
+	 * stale-while-revalidate 要夠長，但不能太長。
 	 *
 	 * 超過 max-age + stale-while-revalidate 之後，CDN 就必須**擋著使用者**
 	 * 回源取新資料。若那一刻函式正好慢（冷啟動、資料庫連線卡住），
 	 * 使用者看到的是一片空白直到逾時 —— 實際發生過，量到 30 秒。
+	 * 所以要留一段「先送舊的、背景再更新」的緩衝。
 	 *
-	 * 拉長之後，過期的內容會先送出去、背景再更新，觀眾永遠不用等函式。
-	 * 活動進行中流量不斷，實際上每 3 秒就會被更新一次，不會真的看到舊資料；
-	 * 只有在沒人訪問的冷門時段才可能拿到稍舊的內容，而那時本來也沒事發生。
+	 * ⚠️ 原本設 600 秒，太長了。某一場判出勝負、晉級的人填進下一場之後，
+	 * 接下來十分鐘內觀眾可能一下看到新的、一下看到舊的 —— 主辦方 10-10
+	 * 回報「希蘿亞的立繪有時出現有時消失」就是這個。立繪與名字都包在
+	 * {#if} 裡，資料一舊整個元素就被移除。
+	 *
+	 * 60 秒仍然蓋得住上面那個 30 秒的冷啟動，而最糟只會舊 1 分鐘。
+	 * 活動進行中流量不斷，實際上每 3 秒就會被更新一次。
 	 */
-	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=600' });
+	setHeaders({ 'Cache-Control': 'public, max-age=3, stale-while-revalidate=60' });
 
 	return { board, leaderboard, roster, bracket, prizes, streams };
 };

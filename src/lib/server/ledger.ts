@@ -6,8 +6,9 @@
  */
 
 import { sql, eq, desc } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from './db';
-import { ledger, users, markets, matches, type LedgerType } from './db/schema';
+import { ledger, users, markets, matches, bets, participants, type LedgerType } from './db/schema';
 
 /** Drizzle 交易物件，或頂層 db。讓這些函式能被包在更大的交易裡重用。 */
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -117,16 +118,27 @@ export interface CoinHistoryRow {
 	matchOrderNo: number | null;
 	roundLabel: string | null;
 	gameNo: number | null;
+	/** 這一筆應援押的是哪一邊。blue | red | null（非應援類的帳目沒有） */
+	side: string | null;
+	/** 該側的選手名字。對手未定時為 null，畫面只寫「藍方」。 */
+	sideName: string | null;
 }
 
 /**
  * 「狗狗幣從哪來、到哪去」—— 企劃書 §一要求要能給觀眾看。
  *
- * 應援與發放帶上場次與應援場，否則列表上會是一連串
- * 分不出來的「應援 −500」，觀眾根本對不上賬。
- * 帳本只存 ref_market_id，因此需要 join 回 markets 與 matches。
+ * 應援與發放帶上場次、應援場、陣營與選手名字，否則列表上會是一連串
+ * 分不出來的「應援 −500」，觀眾根本對不上賬。主辦方 10-10 的回饋是
+ * 「會有失憶觀眾」—— 隔了幾小時回來看，要能看出自己押的是哪一邊。
+ *
+ * 帳本只存 ref_market_id 與 ref_bet_id，所以陣營要從 bets 取，
+ * 選手名字要照陣營從 matches 的藍／紅方各自 join 回 participants。
+ * 發放只會發給押中的人，因此發放那一筆的 side 就是獲勝方。
  */
 export async function getCoinHistory(userId: string, limit = 60): Promise<CoinHistoryRow[]> {
+	const blueP = alias(participants, 'blue_p');
+	const redP = alias(participants, 'red_p');
+
 	const rows = await db
 		.select({
 			id: ledger.id,
@@ -137,11 +149,17 @@ export async function getCoinHistory(userId: string, limit = 60): Promise<CoinHi
 			createdAt: ledger.createdAt,
 			gameNo: markets.gameNo,
 			matchOrderNo: matches.orderNo,
-			roundLabel: matches.roundLabel
+			roundLabel: matches.roundLabel,
+			side: bets.side,
+			blueName: blueP.name,
+			redName: redP.name
 		})
 		.from(ledger)
 		.leftJoin(markets, eq(ledger.refMarketId, markets.id))
 		.leftJoin(matches, eq(markets.matchId, matches.id))
+		.leftJoin(bets, eq(ledger.refBetId, bets.id))
+		.leftJoin(blueP, eq(matches.blueParticipantId, blueP.id))
+		.leftJoin(redP, eq(matches.redParticipantId, redP.id))
 		.where(eq(ledger.userId, userId))
 		.orderBy(desc(ledger.id))
 		.limit(limit);
@@ -156,6 +174,8 @@ export async function getCoinHistory(userId: string, limit = 60): Promise<CoinHi
 		createdAt: r.createdAt.toISOString(),
 		matchOrderNo: r.matchOrderNo ?? null,
 		roundLabel: r.roundLabel ?? null,
-		gameNo: r.gameNo ?? null
+		gameNo: r.gameNo ?? null,
+		side: r.side ?? null,
+		sideName: (r.side === 'blue' ? r.blueName : r.side === 'red' ? r.redName : null) ?? null
 	}));
 }
