@@ -508,3 +508,30 @@ table.pred tr.tied td {
 td.n.neg {
 	color: var(--red);
 }
+
+/* ── 預測戰績：固定高度捲動 ─────────────────────────────
+   人數可能上百，整張攤開會把「近期操作紀錄」推到很下面。
+   表頭釘住，捲到一半也看得出哪一欄是什麼。 */
+.pred-wrap {
+	max-height: 360px;
+	overflow: auto;
+	/* ⚠️ 上內距要歸零。sticky 的表頭是黏在內距框的頂端，
+	   留著上內距的話，捲動時會看到資料從表頭上方的空白處跑過去。 */
+	padding: 0 16px 4px;
+}
+.pred-wrap table.pred thead th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--surface);
+	/* sticky 的元素蓋不住下面的 border，用 box-shadow 畫一條 */
+	box-shadow: inset 0 -1px 0 var(--line);
+}
+
+.pred-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+}

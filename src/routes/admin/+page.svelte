@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { toCsv } from '$lib/xlsx';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -10,6 +11,47 @@
 
 	const when = (d: Date | string) =>
 		new Date(d).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+
+	/**
+	 * 把預測戰績存成 CSV。主辦方要下載後把名字貼到抽獎網站。
+	 *
+	 * ⚠️ 開頭的 \uFEFF（BOM）不能拿掉 —— Excel 看到沒有 BOM 的 UTF-8
+	 * 會當成 Big5 解，中文暱稱全部變亂碼。
+	 *
+	 * 在瀏覽器裡產生，不走伺服器：資料已經在畫面上了，多一趟只是多一個會壞的地方。
+	 */
+	function exportCsv() {
+		const head = ['名次', '觀眾（Discord）', '猜中場次', '列入場次', '命中率', '兩邊都押', '投入', '領回', '淨損益'];
+		const rows = data.predictions.map((p) => [
+			String(p.rank),
+			p.displayName,
+			String(p.won),
+			String(p.counted),
+			`${p.rate}%`,
+			String(p.bothSides),
+			String(p.staked),
+			String(p.returned),
+			String(p.net)
+		]);
+		const csv = toCsv([head, ...rows]);
+		const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+		const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `預測戰績-${today}.csv`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
+	/** 並列第一名的名單。抽獎就是從這幾位裡抽。 */
+	const topNames = $derived(data.predictions.filter((p) => p.rank === 1).map((p) => p.displayName));
+	let copied = $state(false);
+
+	async function copyTop() {
+		await navigator.clipboard.writeText(topNames.join('\n'));
+		copied = true;
+		setTimeout(() => (copied = false), 1500);
+	}
 
 	const STATE_LABEL: Record<string, string> = {
 		pending: '未開始',
@@ -124,7 +166,14 @@
 {#if data.predictions.length === 0}
 	<p class="hint">還沒有任何已結算的應援。</p>
 {:else}
-	<div class="panel" style="overflow-x:auto">
+	<div class="pred-bar">
+		<button class="b b-quiet" style="flex:0" type="button" onclick={exportCsv}>下載 CSV</button>
+		<button class="b b-quiet" style="flex:0" type="button" onclick={copyTop}>
+			{copied ? '已複製' : `複製並列第 1 名（${topNames.length} 位）`}
+		</button>
+		<span class="hint" style="margin:0">清單依猜中場次排序，捲動看完整名單。</span>
+	</div>
+	<div class="panel pred-wrap">
 		<table class="pred">
 			<thead>
 				<tr>
