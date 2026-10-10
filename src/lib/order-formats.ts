@@ -500,3 +500,67 @@ export function parseByColumns(
 	}
 	return out;
 }
+
+// ─────────────────────────────────────────────────────────
+// 匯入預覽的狀態判定
+// ─────────────────────────────────────────────────────────
+
+export type ImportStatus =
+	| 'ready'
+	/** 備註欄整個是空的 */
+	| 'no-code'
+	/** 備註欄有寫東西，但抓不出合法的 6 碼 —— 多半是抄錯或寫成別的格式 */
+	| 'bad-code'
+	/** 抓到 6 碼，但沒有這個帳號 */
+	| 'unknown-code'
+	| 'already-credited'
+	/** 已經發過幣，但這次匯入看到訂單被取消了 —— 要把幣收回來 */
+	| 'revoke'
+	| 'bad-amount'
+	| 'not-paid'
+	| 'other-status'
+	| 'cancelled'
+	| 'merged'
+	| 'voucher-issued'
+	| 'voucher-used';
+
+/**
+ * 一張訂單在匯入預覽裡該標成什麼狀態。
+ *
+ * ⚠️ 判斷順序是有意義的，不要重排：
+ *
+ *   1. 已經發過幣的先處理。重匯同一份檔案時操作員才看得懂，
+ *      而且<strong>訂單後來被取消的話要能認出來</strong>（status = revoke）。
+ *      只認 cancelled（取消／退款／退貨／付款失敗）：「已出貨」「已完成」
+ *      也不是待出貨，但那是比待出貨更後面的階段，錢早就收了，
+ *      把幣收回來等於搶劫。
+ *   2. 兌換券一定要排在 ready 前面。否則同一張訂單先開了券、
+ *      觀眾後來又把代碼補填進平台的留言欄，就會再自動發一次 —— 變成雙倍。
+ *   3. 「沒填」與「填了但看不懂」要分開：前者要去問買家，
+ *      後者通常是抄錯，直接開券比較快。
+ */
+export function decideImportStatus(o: {
+	/** 這張訂單之前發過幣了嗎 */
+	alreadyCredited: boolean;
+	/** 平台狀態造成的阻擋，見 OrderBlock */
+	block: OrderBlock;
+	/** 這張訂單開過的兌換券 */
+	voucher: { used: boolean } | null;
+	/** 計幣金額讀得出來且大於 0 */
+	amountOk: boolean;
+	/** 從備註抓出來的代碼 */
+	code: string | null;
+	/** 備註原文 */
+	rawCode: string;
+	/** 代碼對得到帳號 */
+	hasOwner: boolean;
+}): ImportStatus {
+	if (o.alreadyCredited) return o.block === 'cancelled' ? 'revoke' : 'already-credited';
+	if (o.voucher?.used) return 'voucher-used';
+	if (o.voucher) return 'voucher-issued';
+	if (o.block) return o.block;
+	if (!o.amountOk) return 'bad-amount';
+	if (!o.code) return o.rawCode ? 'bad-code' : 'no-code';
+	if (!o.hasOwner) return 'unknown-code';
+	return 'ready';
+}

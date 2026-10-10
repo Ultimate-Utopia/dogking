@@ -503,3 +503,8 @@ table.pred td.down {
 table.pred tr.tied td {
 	background: color-mix(in srgb, var(--ok) 10%, transparent);
 }
+
+/* 匯入預覽裡「要收回」的金額，和發放的正數區分開 */
+td.n.neg {
+	color: var(--red);
+}

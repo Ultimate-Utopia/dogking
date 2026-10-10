@@ -17,6 +17,7 @@ import {
 	parseMyship,
 	parseEcpay,
 	ecpayGoodsAmount,
+	decideImportStatus,
 	ecpayShops,
 	parseByColumns,
 	stripUnusedColumns
@@ -303,6 +304,62 @@ t('手動欄位：金額可含千分位', () => {
 });
 
 t('extractCode 不吃 7 碼以上的連續字元', () => assert.equal(extractCode('載具/ABC23456'), null));
+
+console.log('匯入預覽的狀態判定');
+
+/** 一張正常的、可以發放的訂單；每個案例只改要測的那一項 */
+const base = {
+	alreadyCredited: false,
+	block: null as null | 'cancelled' | 'other-status' | 'not-paid' | 'merged',
+	voucher: null as { used: boolean } | null,
+	amountOk: true,
+	code: 'K7M2QX' as string | null,
+	rawCode: 'K7M2QX',
+	hasOwner: true
+};
+const st = (over: Partial<typeof base>) => decideImportStatus({ ...base, ...over });
+
+t('一切正常 → 可發放', () => assert.equal(st({}), 'ready'));
+
+t('已發過幣、訂單狀態沒變 → 已發放過，不會重複發', () =>
+	assert.equal(st({ alreadyCredited: true }), 'already-credited'));
+
+t('已發過幣、訂單被取消 → 要收回', () =>
+	assert.equal(st({ alreadyCredited: true, block: 'cancelled' }), 'revoke'));
+
+t('已發過幣、訂單「已出貨」→ 不收回（錢早就收了，比待出貨更後面）', () =>
+	assert.equal(st({ alreadyCredited: true, block: 'other-status' }), 'already-credited'));
+
+t('沒發過幣、訂單被取消 → 就是不發，不是收回', () =>
+	assert.equal(st({ block: 'cancelled' }), 'cancelled'));
+
+t('已發過幣優先於兌換券與代碼問題', () => {
+	assert.equal(st({ alreadyCredited: true, voucher: { used: true } }), 'already-credited');
+	assert.equal(st({ alreadyCredited: true, code: null, rawCode: '' }), 'already-credited');
+	// 取消的情況也一樣，收回優先
+	assert.equal(st({ alreadyCredited: true, block: 'cancelled', voucher: { used: true } }), 'revoke');
+});
+
+t('開過券就不會再自動發（不然補填代碼會變雙倍）', () => {
+	assert.equal(st({ voucher: { used: false } }), 'voucher-issued');
+	assert.equal(st({ voucher: { used: true } }), 'voucher-used');
+});
+
+t('沒填代碼與填了看不懂要分開', () => {
+	assert.equal(st({ code: null, rawCode: '' }), 'no-code');
+	assert.equal(st({ code: null, rawCode: '我的代碼是 abc-123' }), 'bad-code');
+});
+
+t('抓到代碼但查無帳號', () => assert.equal(st({ hasOwner: false }), 'unknown-code'));
+
+t('金額讀不出來', () => assert.equal(st({ amountOk: false }), 'bad-amount'));
+
+t('平台狀態的阻擋原樣帶出來', () => {
+	assert.equal(st({ block: 'not-paid' }), 'not-paid');
+	assert.equal(st({ block: 'merged' }), 'merged');
+	assert.equal(st({ block: 'other-status' }), 'other-status');
+});
+
 
 console.log(`\n${passed} 項全部通過`);
 

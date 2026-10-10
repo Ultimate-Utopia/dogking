@@ -18,6 +18,7 @@
 		'unknown-code': { label: '查無此代碼', cls: 't-void' },
 		'other-status': { label: '非待出貨', cls: 't-settled' },
 		'already-credited': { label: '已發放過', cls: 't-settled' },
+		revoke: { label: '已發幣・訂單取消', cls: 't-void' },
 		'bad-amount': { label: '金額有問題', cls: 't-void' },
 		'not-paid': { label: '尚未付款', cls: 't-settled' },
 		'voucher-issued': { label: '已開兌換券', cls: 't-locked' },
@@ -130,6 +131,13 @@
 	const preview = $derived(ctx?.preview ?? null);
 	const readyRows = $derived(preview?.filter((r) => r.status === 'ready') ?? []);
 	const readyChips = $derived(readyRows.reduce((a, r) => a + r.chips, 0));
+
+	/**
+	 * 已經發過幣、但這次看到訂單被取消的那些。要按「收回」才會動。
+	 * 刻意和可發放分成兩個按鈕 —— 發幣與收幣是相反的動作，不該一鍵做完。
+	 */
+	const revokeRows = $derived(preview?.filter((r) => r.status === 'revoke') ?? []);
+	const revokeChips = $derived(revokeRows.reduce((a, r) => a + r.chips, 0));
 	const problemRows = $derived(
 		preview?.filter((r) => r.status !== 'ready' && !WAITING.has(r.status)) ?? []
 	);
@@ -201,6 +209,18 @@
 			{/if}
 		</p>
 
+		{#if revokeRows.length}
+			<p class="warn" style="border-color:var(--red)">
+				⚠️ 有 <strong>{revokeRows.length} 筆已經發過幣的訂單，這次看到被取消了</strong>，
+				合計 <strong>{fmt(revokeChips)}</strong> 狗狗幣。按下方的「收回」才會扣，發放與收回是分開的兩個動作。
+				<br />
+				只有<strong>取消／退款／退貨／付款失敗</strong>會進到這裡。「已出貨」「已完成」也不是待出貨，
+				但那是比待出貨更後面的階段、錢早就收了，不會自動收回；真要處理請用下方的「人工扣除」。
+				<br />
+				若對方已經把幣應援出去，只收得回剩下的部分，收完會列出差多少。
+			</p>
+		{/if}
+
 		<div style="max-height:340px;overflow:auto;margin-bottom:16px">
 			<table>
 				<thead>
@@ -234,7 +254,11 @@
 								{/if}
 							</td>
 							<td>{r.displayName ?? '—'}</td>
-							<td class="n">{r.status === 'ready' ? fmt(r.chips) : '—'}</td>
+							<td class="n" class:neg={r.status === 'revoke'}>
+								{#if r.status === 'ready'}{fmt(r.chips)}
+								{:else if r.status === 'revoke'}−{fmt(r.chips)}
+								{:else}—{/if}
+							</td>
 							<td><span class="tag {STATUS[r.status]?.cls}">{STATUS[r.status]?.label}</span></td>
 							<td>
 								{#if NEEDS_VOUCHER.has(r.status)}
@@ -290,6 +314,26 @@
 					確認發放 {readyRows.length} 筆
 				</button>
 			</form>
+			{#if revokeRows.length}
+				<form
+					method="POST"
+					action="?/revoke"
+					use:enhance={({ cancel }) => {
+						if (!confirm(`要從 ${revokeRows.length} 位觀眾身上收回共 ${fmt(revokeChips)} 狗狗幣嗎？這些訂單已經被取消。`)) cancel();
+					}}
+				>
+					<input type="hidden" name="platform" value={ctx?.platform ?? ''} />
+					<input type="hidden" name="shop" value={ctx?.shop ?? ''} />
+					<input type="hidden" name="csv" value={ctx?.csv ?? ''} />
+					{#if ctx?.hasHeader}<input type="hidden" name="hasHeader" value="on" />{/if}
+					<input type="hidden" name="colOrderRef" value={ctx?.cols.orderRef ?? 0} />
+					<input type="hidden" name="colAmount" value={ctx?.cols.amount ?? 1} />
+					<input type="hidden" name="colNote" value={ctx?.cols.note ?? 2} />
+					<button class="b b-lock" type="submit">
+						收回 {revokeRows.length} 筆（{fmt(revokeChips)}）
+					</button>
+				</form>
+			{/if}
 			<a class="b b-quiet" style="text-align:center;text-decoration:none;line-height:1.6" href="/admin/coins">
 				取消
 			</a>
@@ -378,6 +422,45 @@
 			預覽比對結果
 		</button>
 	</form>
+</div>
+
+<!-- ── 人工扣除 ──────────────────────────────────────── -->
+<h2>人工扣除狗狗幣</h2>
+<div class="panel">
+	<p class="hint" style="margin:0 0 14px">
+		給系統自動判斷不到的狀況用：平台上沒標成取消但實際退款了、重複下單、誤發、違規等等。
+		<b>訂單被取消的不必用這裡</b> —— 重新匯入那份檔案，預覽會自己標出來並提供「收回」。
+		<br />
+		扣除會在對方的狗狗幣紀錄上留下一筆「人工調整」，<b>理由會原封不動寫進去</b>，觀眾看得到。
+		要加幣請用下方的「產生兌換券」。
+	</p>
+	<form
+		method="POST"
+		action="?/deduct"
+		class="field-row"
+		use:enhance={({ formData, cancel }) => {
+			const c = String(formData.get('code') ?? '').trim();
+			const a = Number(formData.get('amount') ?? 0);
+			if (!confirm(`確定要從備註碼「${c}」的帳號扣除 ${a.toLocaleString('zh-TW')} 狗狗幣嗎？`)) cancel();
+		}}
+	>
+		<div class="field">
+			<label for="dc">訂單備註碼</label>
+			<input id="dc" name="code" type="text" required placeholder="例：K7M2QX" style="width:140px;font-family:var(--mono);text-transform:uppercase" />
+		</div>
+		<div class="field">
+			<label for="da">扣除數量</label>
+			<input id="da" name="amount" type="number" min="1" required placeholder="狗狗幣" style="width:150px" />
+		</div>
+		<div class="field" style="flex:1;min-width:240px">
+			<label for="dr">理由（必填，觀眾看得到）</label>
+			<input id="dr" name="reason" type="text" required placeholder="例：訂單 11390514 已退款" style="width:100%" />
+		</div>
+		<button class="b b-lock" style="flex:0" type="submit">扣除</button>
+	</form>
+	<p class="hint" style="margin:12px 0 0">
+		餘額不足時<b>整筆拒絕</b>，不會只扣一部分 —— 錯誤訊息會寫出目前餘額，要扣到 0 為止就改填那個數字。
+	</p>
 </div>
 
 <!-- ── 兌換券 ────────────────────────────────────────── -->

@@ -4,6 +4,8 @@ import { requireAdmin, logAdmin } from '$lib/server/admin';
 import {
 	previewCsv,
 	commitImport,
+	revokeOrders,
+	deductByPublicCode,
 	issueVoucherForOrder,
 	createRedeemCodes,
 	backfillPublicCodes,
@@ -104,6 +106,75 @@ export const actions: Actions = {
 				`已發放 ${result.credited} 筆，共 ${result.chips.toLocaleString('zh-TW')} 狗狗幣` +
 				(result.skipped ? `（略過重複 ${result.skipped} 筆）` : '')
 		};
+	},
+
+	/**
+	 * 把「已發幣但後來被取消」的訂單收回來。
+	 *
+	 * 和 commit 一樣用原始 CSV 在伺服器端重新推導，不信任前端送回來的預覽 ——
+	 * 預覽到按下收回之間，別的管理員可能已經處理過了。
+	 */
+	revoke: async ({ request, locals }) => {
+		const admin = requireAdmin(locals.user);
+		const form = await request.formData();
+
+		const platform = String(form.get('platform') ?? '賣貨便');
+		const csv = String(form.get('csv') ?? '');
+		const hasHeader = form.get('hasHeader') === 'on';
+		const cols = {
+			orderRef: Number(form.get('colOrderRef') ?? 0),
+			amount: Number(form.get('colAmount') ?? 1),
+			note: Number(form.get('colNote') ?? 2)
+		};
+
+		if (!csv.trim()) return fail(400, { error: '資料遺失，請重新預覽' });
+
+		const again = await previewCsv(platform, csv, cols, hasHeader, String(form.get('shop') ?? ECPAY_DEFAULT_SHOP).trim());
+		const result = await revokeOrders(again.platform, again.rows, admin.id);
+		await logAdmin(admin.id, '收回已取消訂單的狗狗幣', again.platform, result);
+
+		if (result.revoked === 0) {
+			return { success: '沒有需要收回的訂單（可能已經處理過了）' };
+		}
+
+		const parts = [`已收回 ${result.revoked} 筆訂單，共 ${result.chips.toLocaleString('zh-TW')} 狗狗幣`];
+		if (result.short.length) {
+			// 餘額不夠的要寫出來 —— 幣已經應援出去了，差額收不回來
+			const list = result.short
+				.map((s) => `${s.displayName}（訂單 ${s.orderRef} 應收 ${s.wanted.toLocaleString('zh-TW')}、實收 ${s.taken.toLocaleString('zh-TW')}）`)
+				.join('、');
+			parts.push(`其中 ${result.short.length} 筆餘額不足，只收回部分：${list}`);
+		}
+		if (result.failed) parts.push(`${result.failed} 筆失敗，請重新預覽確認`);
+		return { success: parts.join('。') };
+	},
+
+	/**
+	 * 指定訂單備註碼人工扣除。
+	 *
+	 * 給系統判斷不到的狀況用：平台上沒標成取消但實際退款了、重複下單、違規等等。
+	 * 理由必填，會原封不動寫進帳本 —— 事後有爭議時那一行就是唯一依據。
+	 */
+	deduct: async ({ request, locals }) => {
+		const admin = requireAdmin(locals.user);
+		const form = await request.formData();
+
+		const code = String(form.get('code') ?? '');
+		const amount = Number(form.get('amount') ?? 0);
+		const reason = String(form.get('reason') ?? '');
+
+		try {
+			const r = await deductByPublicCode(code, amount, reason, admin.id);
+			await logAdmin(admin.id, '人工扣除狗狗幣', `${r.publicCode} −${amount}`, { reason, after: r.after });
+			return {
+				success:
+					`已從 ${r.displayName}（${r.publicCode}）扣除 ${amount.toLocaleString('zh-TW')} 狗狗幣：` +
+					`${r.before.toLocaleString('zh-TW')} → ${r.after.toLocaleString('zh-TW')}`
+			};
+		} catch (e) {
+			if (e instanceof PurchaseError) return fail(400, { error: e.message });
+			return fail(400, { error: '扣除失敗，請再試一次' });
+		}
 	},
 
 	/**

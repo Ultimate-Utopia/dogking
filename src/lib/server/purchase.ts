@@ -11,7 +11,7 @@
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
 import { db } from './db';
 import { users, ledger, purchaseOrders, redeemCodes } from './db/schema';
-import { lockUser, writeLedger } from './ledger';
+import { getBalance, lockUser, writeLedger } from './ledger';
 import {
 	CODE_ALPHABET,
 	parseCsv,
@@ -22,6 +22,8 @@ import {
 	ecpayShops,
 	ECPAY_DEFAULT_SHOP,
 	parseByColumns,
+	decideImportStatus,
+	type ImportStatus,
 	type ParsedOrder,
 	type OrderFormat
 } from '../order-formats';
@@ -105,22 +107,8 @@ export interface ImportRow {
 	 * redeem_codes.order_ref 補上。
 	 */
 	voucher: { code: string; used: boolean; usedAt: string | null } | null;
-	status:
-		| 'ready'
-		/** 備註欄整個是空的 */
-		| 'no-code'
-		/** 備註欄有寫東西，但抓不出合法的 6 碼 —— 多半是抄錯或寫成別的格式 */
-		| 'bad-code'
-		/** 抓到 6 碼，但沒有這個帳號 */
-		| 'unknown-code'
-		| 'already-credited'
-		| 'bad-amount'
-		| 'not-paid'
-		| 'other-status'
-		| 'cancelled'
-		| 'merged'
-		| 'voucher-issued'
-		| 'voucher-used';
+	/** 判定在 decideImportStatus（純函式，有測試守著） */
+	status: ImportStatus;
 }
 
 /**
@@ -143,8 +131,16 @@ export async function previewOrders(
 	const [credited, owners, vouchers] = await Promise.all([
 		refs.length
 			? tx
-					.select({ orderRef: purchaseOrders.orderRef })
+					// 連「當初發了多少、發給誰」一起撈出來，訂單被取消時要照原本的數字收回。
+					// 不能用這次匯入算出來的金額 —— 取消後平台上的金額可能已經變了。
+					.select({
+						orderRef: purchaseOrders.orderRef,
+						chips: purchaseOrders.chips,
+						userId: purchaseOrders.userId,
+						displayName: users.displayName
+					})
 					.from(purchaseOrders)
+					.innerJoin(users, eq(purchaseOrders.userId, users.id))
 					.where(and(eq(purchaseOrders.platform, platform), inArray(purchaseOrders.orderRef, refs)))
 			: Promise.resolve([]),
 		codes.length
@@ -166,7 +162,7 @@ export async function previewOrders(
 			: Promise.resolve([])
 	]);
 
-	const creditedSet = new Set(credited.map((c) => c.orderRef));
+	const creditedOf = new Map(credited.map((c) => [c.orderRef, c]));
 	const ownerOf = new Map(owners.map((u) => [u.publicCode, u]));
 
 	// 同一張訂單若開過多張券，以「已被兌換的那張」為準 —— 那代表這筆已經發出去了
@@ -190,22 +186,16 @@ export async function previewOrders(
 
 		const voucher = voucherOf.get(o.orderRef) ?? null;
 
-		/**
-		 * 順序有意義：已發過的一律先標出來，重匯同一份檔案時操作員才看得懂。
-		 *
-		 * ⚠️ 兌換券的判斷一定要排在 ready 前面。否則同一張訂單先開了券，
-		 * 觀眾後來又把代碼補填進平台的留言欄，這裡就會再自動發一次 —— 變成雙倍。
-		 */
-		let status: ImportRow['status'];
-		if (creditedSet.has(o.orderRef)) status = 'already-credited';
-		else if (voucher?.used) status = 'voucher-used';
-		else if (voucher) status = 'voucher-issued';
-		else if (o.block) status = o.block;
-		else if (!amountOk) status = 'bad-amount';
-		// 「沒填」與「填了但看不懂」要分開：前者要去問買家，後者通常是抄錯，直接開券比較快
-		else if (!o.code) status = o.rawCode ? 'bad-code' : 'no-code';
-		else if (!owner) status = 'unknown-code';
-		else status = 'ready';
+		const already = creditedOf.get(o.orderRef);
+		const status = decideImportStatus({
+			alreadyCredited: !!already,
+			block: o.block,
+			voucher,
+			amountOk,
+			code: o.code,
+			rawCode: o.rawCode,
+			hasOwner: !!owner
+		});
 
 		return {
 			orderRef: o.orderRef,
@@ -213,9 +203,10 @@ export async function previewOrders(
 			totalTwd: o.totalTwd,
 			rawCode: o.rawCode,
 			code: o.code,
-			userId: status === 'ready' ? owner!.id : null,
-			displayName: owner?.displayName ?? null,
-			chips: amountOk ? o.amountTwd * CHIPS_PER_TWD : 0,
+			userId: status === 'ready' ? owner!.id : status === 'revoke' ? already!.userId : null,
+			displayName: status === 'revoke' ? already!.displayName : (owner?.displayName ?? null),
+			// 要收回的是「當初發出去的數字」，不是這次重算的
+			chips: status === 'revoke' ? already!.chips : amountOk ? o.amountTwd * CHIPS_PER_TWD : 0,
 			statusText: o.statusText,
 			voucher,
 			status
@@ -460,4 +451,144 @@ export async function unusedCodes(limit = 50) {
 		.where(isNull(redeemCodes.usedByUserId))
 		.orderBy(desc(redeemCodes.createdAt))
 		.limit(limit);
+}
+
+// ─────────────────────────────────────────────────────────
+// 收回誤發 / 人工扣除
+// ─────────────────────────────────────────────────────────
+
+export interface RevokeResult {
+	revoked: number;
+	chips: number;
+	/** 餘額不夠、只收回一部分的那些人 */
+	short: Array<{ displayName: string; orderRef: string; wanted: number; taken: number }>;
+	failed: number;
+}
+
+/**
+ * 把預覽中狀態為 revoke 的訂單收回來。
+ *
+ * 會發生在：第一次匯入時訂單是「待出貨」，發了幣；
+ * 後來買家取消或退款，下一次匯入就會看到同一張訂單變成「已取消」。
+ *
+ * ── 做法 ──────────────────────────────────────────
+ *   ・寫一筆相反金額的 adjust 把幣收回（<u>不刪原本的帳目</u>）
+ *   ・刪掉 purchase_orders 那一列，訂單回到「沒發過」的狀態
+ *
+ * 帳本是餘額的唯一來源，刪掉歷史就再也查不出「這個人為什麼少了兩萬」。
+ * 收回後紀錄上看得到 +20,000 與 −20,000 兩筆，說得清楚。
+ *
+ * ⚠️ <strong>餘額不夠時只收回剩下的，不會把餘額扣成負的。</strong>
+ * 幣可能已經應援出去了，而負餘額會讓整個系統的前提（餘額永遠 ≥ 0）破掉。
+ * 差額會列在 short 裡讓操作員知道，要再追就用人工扣除。
+ *
+ * ⚠️ 一律以資料庫當下的數字為準重新撈一次，不信任前端送回來的預覽。
+ */
+export async function revokeOrders(
+	platform: string,
+	rows: ImportRow[],
+	adminUserId: string
+): Promise<RevokeResult> {
+	const refs = rows.filter((r) => r.status === 'revoke').map((r) => r.orderRef);
+	const out: RevokeResult = { revoked: 0, chips: 0, short: [], failed: 0 };
+
+	for (const ref of refs) {
+		try {
+			await db.transaction(async (tx) => {
+				const [order] = await tx
+					.select()
+					.from(purchaseOrders)
+					.where(and(eq(purchaseOrders.platform, platform), eq(purchaseOrders.orderRef, ref)))
+					.limit(1);
+				if (!order) return; // 別人剛剛收回過了
+
+				await lockUser(tx, order.userId);
+				const balance = await getBalance(order.userId, tx);
+				const take = Math.min(order.chips, balance);
+
+				if (take > 0) {
+					await writeLedger(tx, {
+						userId: order.userId,
+						type: 'adjust',
+						amount: -take,
+						note: `訂單 ${ref} 已取消，收回商品消費贈送的狗狗幣`
+					});
+				}
+
+				await tx.delete(purchaseOrders).where(eq(purchaseOrders.id, order.id));
+
+				out.revoked++;
+				out.chips += take;
+				if (take < order.chips) {
+					const [u] = await tx
+						.select({ displayName: users.displayName })
+						.from(users)
+						.where(eq(users.id, order.userId))
+						.limit(1);
+					out.short.push({
+						displayName: u?.displayName ?? order.userId,
+						orderRef: ref,
+						wanted: order.chips,
+						taken: take
+					});
+				}
+			});
+		} catch {
+			out.failed++;
+		}
+	}
+
+	void adminUserId; // 操作紀錄由呼叫端寫，這裡只負責帳
+	return out;
+}
+
+/**
+ * 指定訂單備註碼，人工扣除狗狗幣。
+ *
+ * 給系統自動判斷不到的狀況用：訂單在平台上沒有變成「已取消」但實際退款了、
+ * 重複下單、誤發、違規等等。理由是必填的 —— 事後有爭議時，
+ * 帳本上那一行就是唯一的依據。
+ *
+ * ⚠️ 餘額不足時<strong>整筆拒絕</strong>，不會扣一部分。
+ * 操作員打的是一個明確的數字，自作主張扣少一點只會讓對帳更亂；
+ * 訊息會寫出目前餘額，要扣到 0 為止就改填那個數字。
+ */
+export async function deductByPublicCode(
+	rawCode: string,
+	amount: number,
+	reason: string,
+	adminUserId: string
+): Promise<{ displayName: string; publicCode: string; before: number; after: number }> {
+	const code = extractCode(rawCode) ?? rawCode.trim().toUpperCase();
+	if (!code) throw new PurchaseError('請填訂單備註碼');
+	if (!Number.isInteger(amount) || amount <= 0) throw new PurchaseError('扣除數量必須是正整數');
+	if (!reason.trim()) throw new PurchaseError('請填扣除理由 —— 事後有爭議時這是唯一依據');
+
+	return db.transaction(async (tx) => {
+		const [user] = await tx
+			.select({ id: users.id, displayName: users.displayName, publicCode: users.publicCode })
+			.from(users)
+			.where(eq(users.publicCode, code))
+			.limit(1);
+		if (!user) throw new PurchaseError(`查無備註碼「${code}」的帳號`);
+
+		await lockUser(tx, user.id);
+		const before = await getBalance(user.id, tx);
+		if (before < amount) {
+			throw new PurchaseError(
+				`${user.displayName} 目前只有 ${before.toLocaleString('zh-TW')} 狗狗幣，不夠扣 ${amount.toLocaleString('zh-TW')}。` +
+					`要扣到 0 為止請改填 ${before.toLocaleString('zh-TW')}。`
+			);
+		}
+
+		const after = await writeLedger(tx, {
+			userId: user.id,
+			type: 'adjust',
+			amount: -amount,
+			note: `管理員扣除：${reason.trim()}`
+		});
+
+		void adminUserId;
+		return { displayName: user.displayName, publicCode: user.publicCode ?? code, before, after };
+	});
 }
