@@ -177,8 +177,8 @@
 		{#if ctx?.format === 'ecpay' && ctx.shop}
 			<p class="hint" style="margin:0 0 8px">
 				已辨識為<strong>綠界商店訂單明細</strong>：只算<strong>賣場「{ctx.shop}」</strong>的訂單，
-				訂單狀態<strong>「待出貨」</strong>才自動發放，金額<strong>不含運費</strong>。
-				滿一千免運的訂單，運費欄仍然會寫 65 但其實沒收，系統不會再扣一次。
+				訂單狀態<strong>「待出貨」</strong>才自動發放，金額看<strong>「訂單小計」</strong>（商品本身的錢，不含運費）。
+				滿一千免運的訂單運費欄仍然會寫 65，但系統不看那一欄，所以不會重複扣。
 				{#if ctx.shops.length > 1}
 					<br />檔案裡其他賣場已略過：{ctx.shops
 						.filter((s) => !s.name.includes(ctx.shop))

@@ -143,27 +143,27 @@ console.log('綠界格式（商店訂單明細）');
 
 // 依 09-23 主辦方提供的匯出檔結構捏造。欄位順序刻意與 09-21 那份不同 ——
 // 解析一律用欄位名稱找欄，換版本不該壞。個資欄位一律用假值。
-const ECPAY_HEADER = ['訂單日期', '訂單編號', '訂單狀態', '賣場名稱', '商品', '運費', '訂單總金額', '付款人姓名', '付款人手機', '付款人Email', '付款日期', '付款方式', '收件人姓名', '收件人手機', '收件人地址', '買家備註'];
-const ecpayRow = (ref: string, status: string, shop: string, ship: string, total: string, paidAt: string, pay: string, note: string) =>
-	['2026-09-23 12:00:00', ref, status, shop, '狗狗吊飾', ship, total, '假名甲', '0900000000', 'a@example.com', paidAt, pay, '假名乙', '0900000001', '100 假地址', note];
+const ECPAY_HEADER = ['訂單日期', '訂單編號', '訂單狀態', '賣場名稱', '商品', '訂單小計', '運費', '訂單總金額', '付款人姓名', '付款人手機', '付款人Email', '付款日期', '付款方式', '收件人姓名', '收件人手機', '收件人地址', '買家備註'];
+const ecpayRow = (ref: string, status: string, shop: string, sub: string, ship: string, total: string, paidAt: string, pay: string, note: string) =>
+	['2026-09-23 12:00:00', ref, status, shop, '狗狗吊飾', sub, ship, total, '假名甲', '0900000000', 'a@example.com', paidAt, pay, '假名乙', '0900000001', '100 假地址', note];
 
 const SHOP = '終焉狗王大賽周邊';
 const ecpayRows = [
 	ECPAY_HEADER,
 	// 待出貨：不分付款方式都算可發放（主辦方 10-07 定案）
-	ecpayRow('11349648', '待出貨', SHOP, '65', '1415', '', '信用卡一次付清', 'K7M2QX'),
-	ecpayRow('11288966', '待出貨', SHOP, '65', '765', '', '全家超商取貨付款', 'JDDTN4'),
+	ecpayRow('11349648', '待出貨', SHOP, '1415', '65', '1415', '', '信用卡一次付清', 'K7M2QX'),
+	ecpayRow('11288966', '待出貨', SHOP, '700', '65', '765', '', '全家超商取貨付款', 'JDDTN4'),
 	// 已出貨：不自動發，但會列出來讓操作員決定
-	ecpayRow('11340296', '已出貨', SHOP, '65', '1265', '2026-09-22 10:00:00', '信用卡一次付清', '我的代碼 P4TR9N'),
-	ecpayRow('11334582', '已出貨', SHOP, '65', '1215', '', '7-ELEVEN超商取貨付款', 'W2E3R4'),
+	ecpayRow('11340296', '已出貨', SHOP, '1265', '65', '1265', '2026-09-22 10:00:00', '信用卡一次付清', '我的代碼 P4TR9N'),
+	ecpayRow('11334582', '已出貨', SHOP, '1150', '65', '1215', '', '7-ELEVEN超商取貨付款', 'W2E3R4'),
 	// 已取消：即使是信用卡也不發
-	ecpayRow('10846939', '已取消', SHOP, '65', '815', '', '信用卡一次付清', 'H8WQ3Z'),
+	ecpayRow('10846939', '已取消', SHOP, '750', '65', '815', '', '信用卡一次付清', 'H8WQ3Z'),
 	// 運費 0
-	ecpayRow('10829378', '待出貨', SHOP, '0', '900', '', '信用卡一次付清', 'R5TY7U'),
+	ecpayRow('10829378', '待出貨', SHOP, '900', '0', '900', '', '信用卡一次付清', 'R5TY7U'),
 	// 運費空白
-	ecpayRow('10829377', '待出貨', SHOP, '', '500', '', '信用卡一次付清', ''),
+	ecpayRow('10829377', '待出貨', SHOP, '500', '', '500', '', '信用卡一次付清', ''),
 	// 其他賣場：匯出時會一起下載，要整筆略過
-	ecpayRow('99999999', '待出貨', '語風薯薯撿到貓-魔王城商品部', '65', '9999', '', '信用卡一次付清', 'K7M2QX')
+	ecpayRow('99999999', '待出貨', '語風薯薯撿到貓-魔王城商品部', '9999', '65', '9999', '', '信用卡一次付清', 'K7M2QX')
 ];
 
 const ecpay = parseEcpay(ecpayRows, SHOP);
@@ -176,41 +176,61 @@ t('只留賽事賣場的訂單', () => {
 	assert.equal(ecpay.find((p) => p.orderRef === '99999999'), undefined);
 });
 
-t('沒滿免運門檻 → 狗狗幣金額＝訂單總金額 − 運費', () => {
+t('有付運費時：狗狗幣金額＝訂單小計，不是總金額', () => {
 	assert.equal(eBy('11288966').totalTwd, 765);
 	assert.equal(eBy('11288966').amountTwd, 700);
 });
 
-t('滿千免運 → 不扣運費（扣了就是扣兩次）', () => {
+t('滿千免運時不會重複扣運費', () => {
 	// 主辦方 10-10 回報的狀況：小計 3,150、免運折抵 −65、運費 65，實付 3,150。
-	// 匯出檔的運費欄仍然是 65，照扣就會少發 6,500 狗狗幣。
+	// 匯出檔的運費欄仍然是 65，照「總金額 − 運費」扣就會少發 6,500 狗狗幣。
 	assert.equal(eBy('11349648').totalTwd, 1415);
 	assert.equal(eBy('11349648').amountTwd, 1415);
 });
 
-console.log('綠界：運費與免運的推算');
+console.log('綠界：商品金額怎麼算');
 
-t('免運判定：總金額 − 運費 ≥ 1000 就是免運，不扣', () => {
+t('有小計欄就直接用，不必猜有沒有付運費', () => {
+	// 免運：總金額 = 小計
+	assert.equal(ecpayGoodsAmount(3150, 65, 3150), 3150);
+	// 有付運費：總金額 = 小計 + 運費
+	assert.equal(ecpayGoodsAmount(165, 65, 100), 100);
+	// 運費 0
+	assert.equal(ecpayGoodsAmount(900, 0, 900), 900);
+	// 小計剛好在免運門檻上 —— 用推算的會少算 65，用小計欄就是對的
+	assert.equal(ecpayGoodsAmount(1000, 65, 1000), 1000);
+});
+
+t('總金額比小計還少（商品被折扣）→ 以實付為準', () => {
+	// 小計 1,000、折 100、運費 65、實付 965 → 商品實付 900
+	assert.equal(ecpayGoodsAmount(965, 65, 1000), 900);
+	// 不會算成負數
+	assert.equal(ecpayGoodsAmount(30, 65, 500), 0);
+});
+
+t('沒有小計欄（舊版匯出檔）→ 退回用免運規則推算', () => {
 	assert.equal(ecpayGoodsAmount(3150, 65), 3150);
-	assert.equal(ecpayGoodsAmount(1415, 65), 1415);
-	// 剛好在門檻上
 	assert.equal(ecpayGoodsAmount(1065, 65), 1065);
-});
-
-t('沒免運就扣掉運費', () => {
 	assert.equal(ecpayGoodsAmount(165, 65), 100);
-	assert.equal(ecpayGoodsAmount(765, 65), 700);
-	// 總金額 − 運費 = 999，差一塊就達門檻
 	assert.equal(ecpayGoodsAmount(1064, 65), 999);
+	assert.equal(ecpayGoodsAmount(900, 0), 900);
 });
 
-t('運費 0 或空白時原封不動', () => {
-	assert.equal(ecpayGoodsAmount(900, 0), 900);
-	assert.equal(ecpayGoodsAmount(500, 0), 500);
+t('小計欄空白或讀不出來時，當成沒有這一欄', () => {
+	assert.equal(ecpayGoodsAmount(3150, 65, NaN), 3150);
+	assert.equal(ecpayGoodsAmount(165, 65, NaN), 100);
 });
 
 t('金額讀不出來時維持 NaN，不要變成數字', () =>
 	assert.equal(Number.isNaN(ecpayGoodsAmount(NaN, 65)), true));
+
+t('舊版匯出檔（沒有小計欄）整份仍然認得出來、也算得出金額', () => {
+	const headerNoSub = ECPAY_HEADER.filter((h) => h !== '訂單小計');
+	const rowNoSub = (r: string[]) => r.filter((_, i) => ECPAY_HEADER[i] !== '訂單小計');
+	const rows = [headerNoSub, rowNoSub(ecpayRow('11288966', '待出貨', SHOP, '700', '65', '765', '', '信用卡一次付清', 'JDDTN4'))];
+	assert.equal(detectFormat(rows), 'ecpay');
+	assert.equal(parseEcpay(rows, SHOP)[0].amountTwd, 700);
+});
 
 t('運費 0 或空白都當 0，不會算成 NaN', () => {
 	assert.equal(eBy('10829378').amountTwd, 900);
@@ -231,7 +251,7 @@ t('狀態會寫出付款方式，操作員才知道為什麼不能發', () =>
 	assert.equal(eBy('11334582').statusText, '已出貨・7-ELEVEN超商取貨付款'));
 
 t('備註有寫東西但抓不出代碼時，原文要留著（前台才能顯示「填錯」）', () => {
-	const rows2 = [ECPAY_HEADER, ecpayRow('12000001', '待出貨', SHOP, '0', '500', '', '信用卡一次付清', '我的代碼是 abc-123')];
+	const rows2 = [ECPAY_HEADER, ecpayRow('12000001', '待出貨', SHOP, '500', '0', '500', '', '信用卡一次付清', '我的代碼是 abc-123')];
 	const [o] = parseEcpay(rows2, SHOP);
 	assert.equal(o.code, null);
 	assert.equal(o.rawCode, '我的代碼是 abc-123');

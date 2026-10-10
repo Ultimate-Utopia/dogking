@@ -253,11 +253,11 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
  *
  *   ・第 1 列就是標題，一張訂單一列
  *   ・代碼填在「買家備註」
- *   ・「訂單總金額」是買家<strong>實付</strong>的錢，運費與運費折抵都算進去了。
- *     另有「運費」欄 —— 狗狗幣不含運費，所以通常要扣掉（運費可能是 0）。
- *     ⚠️ 但賣場有「滿一千元免運」活動，免運的訂單「運費」欄<u>仍然填 65</u>，
- *     只是另外有一筆 −65 的折抵，兩者在總金額裡互相抵銷。照著扣就會重複扣，
- *     見下面 ecpayGoodsAmount 的說明。
+ *   ・「訂單總金額」是買家<strong>實付</strong>的錢，運費與各種折抵都算進去了；
+ *     「訂單小計」是商品本身的金額 —— 狗狗幣要發的就是這個數字
+ *     ⚠️ 不要用「總金額 − 運費」：賣場有「滿一千元免運」活動，免運的訂單
+ *     運費欄<u>仍然填 65</u>，只是另外有一筆 −65 的折抵在總金額裡抵銷掉了，
+ *     照著扣就會扣兩次運費。見 ecpayGoodsAmount。
  *   ・⚠️ 只能用 Excel 匯出。綠界的 CSV 匯出欄位會亂序，不能用
  *   ・欄位順序在不同版本的匯出檔不一樣（09-21 與 09-23 兩份就不同），
  *     所以一律用「欄位名稱」找欄，不寫死第幾欄
@@ -266,7 +266,20 @@ export function parseMyship(rows: string[][]): ParsedOrder[] {
  * 解析只讀下面 ECPAY_KEEP 那幾欄；瀏覽器端上傳前也會先把其他欄位拿掉。
  */
 const ECPAY_REQUIRED = ['訂單編號', '訂單狀態', '付款方式', '運費', '訂單總金額'];
-const ECPAY_KEEP = [...ECPAY_REQUIRED, '賣場名稱', '付款日期', '買家備註'];
+
+/**
+ * 商品小計的欄名。綠界不同版本的匯出檔叫法不一定一樣，依序找第一個有的。
+ *
+ * ⚠️ 刻意不列進 ECPAY_REQUIRED —— 列進去的話，沒有這一欄的舊匯出檔
+ * 會整份認不出來。找不到小計時會退回用運費推算，見 ecpayGoodsAmount。
+ */
+const ECPAY_SUBTOTAL_NAMES = ['訂單小計', '商品小計', '小計', '商品總額'];
+
+/**
+ * ⚠️ 小計一定要列在這裡。這份清單同時是瀏覽器端上傳前的「保留欄位」白名單，
+ * 漏掉的話欄位會在上傳前就被砍掉，伺服器永遠讀不到。
+ */
+const ECPAY_KEEP = [...ECPAY_REQUIRED, ...ECPAY_SUBTOTAL_NAMES, '賣場名稱', '付款日期', '買家備註'];
 
 /** 主辦方的賽事賣場。匯出時會連同一個帳號的其他賣場一起下載，要濾掉。 */
 export const ECPAY_DEFAULT_SHOP = '終焉狗王大賽';
@@ -327,37 +340,42 @@ export function ecpayShops(rows: string[][]): { name: string; count: number }[] 
 export const ECPAY_FREE_SHIPPING_MIN = 1000;
 
 /**
- * 從「訂單總金額」與「運費」推回商品金額（＝要發狗狗幣的金額）。
+ * 算出要發狗狗幣的商品金額。
  *
- * 主辦方 10-10 回報重複扣運費。實際的訂單長這樣：
+ * 主辦方 10-10 回報重複扣運費。問題出在賣場的「滿一千元免運」：
  *
  *     小計 3,150　｜　滿一千免運 −65　｜　運費 65　→　實付 3,150
- *     匯出檔：運費 65、訂單總金額 3,150
+ *     匯出檔：訂單小計 3,150、運費 65、訂單總金額 3,150
  *
- * 總金額已經是實付金額（折抵算進去了），再扣一次 65 就等於扣兩次運費。
+ * 總金額已經是實付金額（折抵算進去了），再扣一次運費就是扣兩次。
  *
- * ── 怎麼判斷這張單到底有沒有付運費 ─────────────────
- * 匯出檔沒有折抵欄位，只有「運費」與「總金額」，所以要用免運規則反推：
+ * ── 有「訂單小計」欄時（10-10 起，主辦方確認匯出檔有這一欄）──
+ * 直接讀，不必猜：
  *
- *   ・設 net = 總金額 − 運費。若 net ≥ 1000，那麼「有付運費」這個假設
- *     會推出商品小計 = net ≥ 1000 —— 但小計滿 1000 就會自動免運，矛盾。
- *     所以這張單一定是免運的，商品金額 = 總金額。
- *   ・若 net < 1000，正常情況就是有付運費，商品金額 = net。
+ *   ・總金額 ≥ 小計：沒有打折到商品，兩者的差額就是真正付掉的運費
+ *     （0 或 65）。商品金額 = 小計。
+ *   ・總金額 < 小計：有折到商品（全館折扣之類），實際收到的錢比小計少，
+ *     這時以<strong>實付</strong>為準：商品金額 = 總金額 − 運費。
+ *     折抵若其實是折運費而非折商品，這樣會少算一點 —— 刻意的，理由見下。
  *
- * ⚠️ net < 1000 時其實還有另一種可能：免運且小計落在 1000～1065 之間
- * （例如小計剛好 1,000，總金額 1,000，net 935）。這種單會少算 65 元
- * ＝少發 6,500 狗狗幣。<u>刻意選少算</u> —— 少發可以事後開兌換券補，
+ * ── 沒有「訂單小計」欄時（舊版匯出檔）──
+ * 退回用免運規則反推：設 net = 總金額 − 運費。若 net ≥ 1000，那麼
+ * 「有付運費」會推出商品小計 = net ≥ 1000 —— 但滿 1,000 就會免運，矛盾，
+ * 所以一定是免運的，商品金額 = 總金額；net < 1000 才扣運費。
+ * <u>這條推法在「免運且小計落在 1,000～1,065 之間」時會少算 65 元</u>，
+ * 而且前提是免運活動對所有訂單都有效。有小計欄就用不到它了。
+ *
+ * ⚠️ 拿不準時一律選少算。少發可以事後開兌換券補，
  * 多發的幣可能已經被應援出去，收不回來。
- *
- * ⚠️ 這整套推論的前提是「免運活動對賣場所有訂單都有效」。
- * 若活動有起訖時間、或只對部分運送方式有效，活動開始前的訂單就可能
- * 真的付了運費又滿 1,000，那會多發 6,500 幣。要完全不猜，得請主辦方
- * 匯出時帶上折抵欄位（綠界訂單明細若有「折扣金額」之類的欄位就能直接用）。
  */
-export function ecpayGoodsAmount(total: number, shipping: number): number {
+export function ecpayGoodsAmount(total: number, shipping: number, subtotal?: number): number {
 	if (!Number.isFinite(total)) return NaN;
-	if (!shipping) return total;
 
+	if (subtotal !== undefined && Number.isFinite(subtotal)) {
+		return total >= subtotal ? subtotal : Math.max(0, total - shipping);
+	}
+
+	if (!shipping) return total;
 	const net = total - shipping;
 	return net >= ECPAY_FREE_SHIPPING_MIN ? total : net;
 }
@@ -376,8 +394,9 @@ export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedO
 	const cShip = col('運費');
 	const cTotal = col('訂單總金額');
 	const cNote = col('買家備註');
-	// 這份檔案裡沒有折抵欄位，只能從金額推回去，見 ecpayGoodsAmount
 	const cShop = col('賣場名稱');
+	// 小計欄不一定存在（舊版匯出檔沒有），沒有時 ecpayGoodsAmount 會自己退回推算
+	const cSubtotal = ECPAY_SUBTOTAL_NAMES.map(col).find((i) => i >= 0) ?? -1;
 
 	const out: ParsedOrder[] = [];
 
@@ -391,7 +410,8 @@ export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedO
 		const total = money(r[cTotal]);
 		// 運費可能是 0 或空白，兩種都當 0
 		const shipping = money(r[cShip]) || 0;
-		const amountTwd = ecpayGoodsAmount(total, shipping);
+		const subtotal = cSubtotal >= 0 ? money(r[cSubtotal]) : undefined;
+		const amountTwd = ecpayGoodsAmount(total, shipping, subtotal);
 
 		let rawCode = cNote >= 0 ? (r[cNote] ?? '').trim() : '';
 		if (rawCode === '-') rawCode = '';
