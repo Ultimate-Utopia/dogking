@@ -112,11 +112,15 @@
 
 <h2>預測戰績</h2>
 <p class="hint">
-	依猜中場次數排序，<b>全部列出</b>（{data.predictions.length} 人）。名字就是 Discord 顯示名稱。
-	只算<b>已結算</b>的應援 —— 還沒開賽的不算（不然剛應援的人看起來很準），
-	整場取消退還的也不算（那不是猜錯）。
-	<b>不論投入多少、什麼時候應援，猜中一次就是一次</b>，所以次數相同即為並列，抽獎時機會一樣。
+	依<b>猜中場次數</b>排序，全部列出（{data.predictions.length} 人）。名字就是 Discord 顯示名稱。
+	抽獎只要看「猜中」那一欄。
 </p>
+<ul class="hint" style="margin:0 0 12px;padding-left:1.3em">
+	<li><b>一場算一次。</b>同一場分好幾次加碼、押中了，算猜中一場，不是三場。</li>
+	<li><b>同一場兩邊都押的，整場不列入</b>（穩贏，沒有預測可言）—— 猜中與分母都不算，另開一欄列出來。</li>
+	<li>只算<b>已結算</b>的場次。還沒開賽的不算（不然剛應援的人看起來很準），整場取消退還的也不算（那不是猜錯）。</li>
+	<li><b>不論投入多少、什麼時候應援，猜中一次就是一次</b>，所以次數相同即為並列，抽獎時機會一樣。</li>
+</ul>
 {#if data.predictions.length === 0}
 	<p class="hint">還沒有任何已結算的應援。</p>
 {:else}
@@ -127,8 +131,9 @@
 					<th>名次</th>
 					<th>觀眾（Discord）</th>
 					<th class="n">猜中</th>
-					<th class="n">已結算</th>
+					<th class="n">列入場次</th>
 					<th class="n">命中率</th>
+					<th class="n">兩邊都押</th>
 					<th class="n">投入</th>
 					<th class="n">領回</th>
 					<th class="n">淨損益</th>
@@ -140,8 +145,9 @@
 						<td>{p.rank}</td>
 						<td>{p.displayName}</td>
 						<td class="n"><b>{p.won}</b></td>
-						<td class="n">{p.total}</td>
+						<td class="n">{p.counted}</td>
 						<td class="n">{p.rate}%</td>
+						<td class="n">{p.bothSides || '—'}</td>
 						<td class="n">{fmt(p.staked)}</td>
 						<td class="n">{fmt(p.returned)}</td>
 						<td class="n" class:up={p.net > 0} class:down={p.net < 0}>
