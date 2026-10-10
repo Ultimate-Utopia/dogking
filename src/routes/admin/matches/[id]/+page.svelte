@@ -74,13 +74,21 @@
 	/** 已建立的應援場，依 gameNo 對應。優先用輪詢到的即時資料。 */
 	const marketOf = (gameNo: number) => shownMarkets.find((m) => m.gameNo === gameNo);
 
-	/** 整場應援 + 該賽制的所有小局 */
+	/**
+	 * 要顯示哪幾張應援場卡片。
+	 *
+	 * 這次的玩法一場只開一個應援場（看整場勝負），所以預設只出現一張，
+	 * 名稱直接用場次名 —— 卡片上寫「整場應援」、頁面標題寫「場次 3」，
+	 * 操作員要自己對應，容易按錯（主辦方 10-10 回報）。
+	 *
+	 * 單局的卡片<u>只有在那個應援場已經建立過時才出現</u>：
+	 * 不主動提供，但已經開過的要能繼續關閉、判定、發放，不能讓它變成孤兒。
+	 */
 	const slots = $derived([
-		{ gameNo: 0, label: '整場應援' },
-		...Array.from({ length: data.maxGames }, (_, i) => ({
-			gameNo: i + 1,
-			label: `第 ${i + 1} 局`
-		}))
+		{ gameNo: 0, label: `第 ${data.match.orderNo} 場・${data.match.roundLabel}` },
+		...Array.from({ length: data.maxGames }, (_, i) => i + 1)
+			.filter((gameNo) => marketOf(gameNo))
+			.map((gameNo) => ({ gameNo, label: `第 ${gameNo} 局` }))
 	]);
 </script>
 
@@ -256,7 +264,10 @@
 <!-- ── 應援場 ─────────────────────────────────────────── -->
 <h2>應援場</h2>
 <p class="hint">
-	整場應援是看這一場的勝負，單局應援只看單一局。每個應援場的流程都是：開放應援 → 關閉應援 → 判定勝方 → 發放。
+	流程：開放應援 → 關閉應援 → 判定勝方 → 發放。
+	<br />
+	這次的玩法一場只開一個應援場（看整場勝負），所以下面只有一張卡片。
+	<u>關閉應援之後，前台會停在這一場</u>，直到你在上面把場次狀態改成「已結束」才會換下一場。
 </p>
 
 <div class="market-grid">

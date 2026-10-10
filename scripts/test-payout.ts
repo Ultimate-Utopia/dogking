@@ -79,4 +79,30 @@ t('某一邊沒有人應援時不顯示分配倍率', () => {
 	assert.equal(odds.total, 500);
 });
 
+console.log('小額應援');
+
+t('押中的人永遠至少拿回本金 —— 1 枚也不會變成 0', () => {
+	// 主辦方 10-10 問：只投入 1 枚、猜對了，有沒有可能分到 0？
+	// 不可能。總獎池 ≥ 獲勝方獎池，所以 1 × 總池 ÷ 贏方池 ≥ 1，無條件捨去後仍 ≥ 1。
+	assert.equal(calcPayout(1, 300, 301), 1); // 輸方只有 1 枚 → 只拿回本金，沒賺
+	assert.equal(calcPayout(1, 1, 2), 2); // 兩邊各 1 枚 → 拿回 2
+	assert.equal(calcPayout(1, 100, 10_000), 100);
+	assert.equal(calcPayout(1, 1, 1), 1); // 沒有人押另一邊
+});
+
+t('無條件捨去只會吃掉「賺的部分」，不會吃掉本金', () => {
+	// 隨機抽一萬組，確認派發金額永遠 ≥ 投入金額
+	let worst = Infinity;
+	for (let i = 0; i < 10_000; i++) {
+		const amount = 1 + Math.floor(Math.random() * 50);
+		const winner = amount + Math.floor(Math.random() * 100_000);
+		const total = winner + Math.floor(Math.random() * 100_000);
+		const payout = calcPayout(amount, winner, total);
+		assert.ok(payout >= amount, `投入 ${amount} 卻只拿回 ${payout}`);
+		worst = Math.min(worst, payout - amount);
+	}
+	// 最糟的情況就是不賺不賠，不會倒賠
+	assert.equal(worst, 0);
+});
+
 console.log(`\n${passed} 項全部通過`);

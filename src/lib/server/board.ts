@@ -151,14 +151,29 @@ export async function getBoardState() {
 		};
 	}
 
-	// 當前場次：優先有開放中的應援場，其次待結算，再其次下一個未完成的
+	/**
+	 * 當前場次 —— 首頁最上面那一塊要顯示哪一場。
+	 *
+	 * ⚠️ 順序不能改成「先找開放中的」。這次的玩法是<strong>所有場次一開場
+	 * 就全部開放</strong>，所以永遠都有一堆開放中的應援場；一旦主持人把第 2 場
+	 * 關閉應援，「先找開放中的」就會立刻跳到第 3 場 —— 比賽還在打，
+	 * 畫面已經換人了（主辦方 10-10 回報）。
+	 *
+	 * 所以改成：<u>已經關閉應援或已結算、而且場次還沒被標成已結束的，優先</u>。
+	 * 關閉應援代表主持人正在處理那一場，畫面就該停在那裡，
+	 * 直到後台把場次狀態切成「已結束」為止。
+	 *
+	 * 代價是後台忘記切「已結束」的話畫面會一直停著 —— 這是刻意的，
+	 * 停著至少看得出有人忘了動作，自己跳走反而沒人發現。
+	 */
 	const hasState = (matchId: number, state: string) =>
 		allMarkets.some((mk) => mk.matchId === matchId && mk.state === state);
+	const running = (m: (typeof allMatches)[number]) => m.state !== 'done' && m.state !== 'void';
 
 	const current =
-		allMatches.find((m) => hasState(m.id, 'open')) ??
-		allMatches.find((m) => hasState(m.id, 'locked')) ??
-		allMatches.find((m) => m.state !== 'done' && m.state !== 'void') ??
+		allMatches.find((m) => running(m) && (hasState(m.id, 'locked') || hasState(m.id, 'settled'))) ??
+		allMatches.find((m) => running(m) && hasState(m.id, 'open')) ??
+		allMatches.find(running) ??
 		allMatches[allMatches.length - 1];
 
 	const boardMarkets: BoardMarket[] = allMarkets
