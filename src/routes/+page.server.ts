@@ -5,6 +5,7 @@ import { placeBet } from '$lib/server/tournament';
 import { listPrizes } from '$lib/server/prizes';
 import { listStreams } from '$lib/server/streams';
 import { InsufficientBalanceError } from '$lib/server/ledger';
+import { MIN_STAKE } from '$lib/bet-amount';
 
 /**
  * 首頁只回傳「所有人都一樣」的資料，讓整頁可以被 CDN 快取。
@@ -62,7 +63,10 @@ export const actions: Actions = {
 		const idempotencyKey = String(form.get('idempotencyKey') ?? '');
 
 		if (side !== 'blue' && side !== 'red') return fail(400, { error: '請選擇要應援哪一邊' });
-		if (!Number.isInteger(amount) || amount <= 0) return fail(400, { error: '應援金額無效' });
+		// placeBet 也會再驗一次，這裡先擋是為了回一句看得懂的話
+		if (!Number.isInteger(amount) || amount < MIN_STAKE) {
+			return fail(400, { error: `應援金額最少 ${MIN_STAKE} 狗狗幣` });
+		}
 		if (!idempotencyKey) return fail(400, { error: '請重新整理後再試一次' });
 
 		try {

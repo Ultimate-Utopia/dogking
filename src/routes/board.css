@@ -995,3 +995,10 @@ a.member:hover {
 .owe a {
 	color: var(--red);
 }
+
+/* 金額沒到最低門檻。送出按鈕本來就會變灰，但要寫出原因，
+   不然使用者只會看到一顆按不下去的按鈕。 */
+.too-low {
+	color: var(--red);
+	font-weight: 700;
+}

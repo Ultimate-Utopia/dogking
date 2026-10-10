@@ -7,7 +7,7 @@
 	import Bracket from '$lib/components/Bracket.svelte';
 	import IdCard from '$lib/components/IdCard.svelte';
 	import PrizeCard from '$lib/components/PrizeCard.svelte';
-	import { sanitizeStake } from '$lib/bet-amount';
+	import { sanitizeStake, MIN_STAKE } from '$lib/bet-amount';
 	import StreamStrip from '$lib/components/StreamStrip.svelte';
 	import type { PageData, ActionData } from './$types';
 
@@ -161,7 +161,12 @@
 	});
 
 	const canBet = $derived(
-		!!user && !!activeMarket && isOpen(activeMarket) && !!pickedSide && stake > 0 && stake <= balance
+		!!user &&
+		!!activeMarket &&
+		isOpen(activeMarket) &&
+		!!pickedSide &&
+		stake >= MIN_STAKE &&
+		stake <= balance
 	);
 
 	/**
@@ -220,6 +225,8 @@
 	 */
 	let stakeText = $state('');
 	let stakeClamped = $state(false);
+	/** 打了數字但還沒到最低金額。只提示，不自動補 —— 補了就沒辦法繼續往下打。 */
+	let stakeBelowMin = $state(false);
 
 	/**
 	 * ⚠️ 一定要把清理後的字串寫回 DOM。
@@ -235,6 +242,7 @@
 		stakeText = r.text;
 		stake = r.value;
 		stakeClamped = r.clamped;
+		stakeBelowMin = r.belowMin;
 		if (el.value !== r.text) el.value = r.text;
 	}
 
@@ -251,6 +259,7 @@
 			stake = max;
 			stakeText = max === 0 ? '' : String(max);
 			stakeClamped = true;
+			stakeBelowMin = max > 0 && max < MIN_STAKE;
 		}
 	});
 
@@ -260,6 +269,7 @@
 		if (shown !== stake) {
 			stakeText = stake === 0 ? '' : String(stake);
 			stakeClamped = false;
+			stakeBelowMin = stake > 0 && stake < MIN_STAKE;
 		}
 	});
 
@@ -613,10 +623,12 @@
 											oninput={(e) => typeStake(e.currentTarget)}
 										/>
 										<span class="est">
-											{#if stake > 0}
+											{#if stakeBelowMin}
+												<span class="too-low">最低 {fmt(MIN_STAKE)} 狗狗幣</span>
+											{:else if stake > 0}
 												預估獲得 {fmt(estimate)}{#if stakeClamped}・已是全部狗狗幣{/if}
 											{:else}
-												可直接輸入金額
+												可直接輸入，最低 {fmt(MIN_STAKE)} 狗狗幣
 											{/if}
 										</span>
 									</div>
@@ -624,6 +636,11 @@
 									<button class="submit" disabled={!canBet} onclick={() => (confirming = true)}>
 										送出應援
 									</button>
+									{#if balance < MIN_STAKE}
+										<p class="too-low" style="margin:8px 0 0;text-align:center">
+											持有不足 {fmt(MIN_STAKE)} 狗狗幣，無法應援
+										</p>
+									{/if}
 								{/if}
 							{/if}
 						</div>
@@ -838,10 +855,12 @@
 										oninput={(e) => typeStake(e.currentTarget)}
 									/>
 									<span class="est">
-										{#if stake > 0}
+										{#if stakeBelowMin}
+											<span class="too-low">最低 {fmt(MIN_STAKE)} 狗狗幣</span>
+										{:else if stake > 0}
 											預估獲得 {fmt(estimate)}{#if stakeClamped}・已是全部狗狗幣{/if}
 										{:else}
-											可直接輸入金額
+											可直接輸入，最低 {fmt(MIN_STAKE)} 狗狗幣
 										{/if}
 									</span>
 								</div>
@@ -849,6 +868,11 @@
 								<button class="submit" disabled={!canBet} onclick={() => (confirming = true)}>
 									送出應援
 								</button>
+								{#if balance < MIN_STAKE}
+									<p class="too-low" style="margin:8px 0 0;text-align:center">
+										持有不足 {fmt(MIN_STAKE)} 狗狗幣，無法應援
+									</p>
+								{/if}
 							{/if}
 						</div>
 					{/if}
@@ -1012,6 +1036,7 @@
 			</dl>
 			<p class="fine">
 				應援後<strong>無法取消或更改</strong>。預估獲得會隨其他人應援而變動，最終金額依關閉應援後的獎池計算。
+				單筆最低 {fmt(MIN_STAKE)} 狗狗幣。
 			</p>
 			<form method="POST" action="?/bet" use:enhance class="modal-actions">
 				<input type="hidden" name="marketId" value={activeMarket.id} />

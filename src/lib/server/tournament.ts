@@ -17,6 +17,7 @@ import { db } from './db';
 import { markets, bets, matches, users, participants } from './db/schema';
 import { lockUser, writeLedger } from './ledger';
 import { calcOdds, calcPayout } from '../payout';
+import { MIN_STAKE } from '../bet-amount';
 
 // 獎池計算搬到 $lib/payout.ts（純函式、可不連資料庫測試），這裡照舊匯出給既有呼叫端
 export { calcOdds, calcPayout };
@@ -189,8 +190,9 @@ export interface PlaceBetInput {
 export async function placeBet(input: PlaceBetInput) {
 	const { userId, marketId, side, amount, idempotencyKey } = input;
 
-	if (!Number.isInteger(amount) || amount <= 0) {
-		throw new MarketStateError('應援金額必須是正整數');
+	// ⚠️ 前端也擋，但那永遠可以被繞過。真正的把關在這裡。
+	if (!Number.isInteger(amount) || amount < MIN_STAKE) {
+		throw new MarketStateError(`應援金額最少 ${MIN_STAKE} 狗狗幣，且必須是整數`);
 	}
 
 	// 冪等：同一個鍵已經成立過就直接回傳，不重複扣款
