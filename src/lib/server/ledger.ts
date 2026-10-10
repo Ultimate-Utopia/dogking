@@ -34,6 +34,18 @@ export interface LedgerEntry {
 	refMarketId?: number;
 	refBetId?: number;
 	note?: string;
+	/**
+	 * 允許扣成負餘額。預設 false。
+	 *
+	 * ⚠️ <strong>只有後台的收回與人工扣除可以打開。</strong>
+	 * 應援（placeBet）絕對不能 —— 那道檢查是防止「同時送兩筆都通過餘額檢查」的
+	 * 最後一關，打開就等於讓人憑空應援。
+	 *
+	 * 為什麼收回需要：幣可能已經應援出去了，手上剩 0。若因此不扣，
+	 * 等於讓人靠一張取消的訂單白賺一筆。照實扣成負的，欠多少是多少，
+	 * 要再應援得先補一張新訂單（主辦方 10-10 定案）。
+	 */
+	allowNegative?: boolean;
 }
 
 /**
@@ -46,7 +58,7 @@ export async function writeLedger(tx: Executor, entry: LedgerEntry): Promise<num
 	const current = await getBalance(entry.userId, tx);
 	const next = current + entry.amount;
 
-	if (next < 0) {
+	if (next < 0 && !entry.allowNegative) {
 		throw new InsufficientBalanceError(current, Math.abs(entry.amount));
 	}
 

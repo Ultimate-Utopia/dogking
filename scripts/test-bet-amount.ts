@@ -49,4 +49,14 @@ t('長到爆掉的數字不會變成科學記號', () => {
 
 t('餘額有小數時以無條件捨去為上限', () => assert.equal(sanitizeStake('99999', 1234.9).value, 1234));
 
+t('餘額是負數時一律 0 —— 訂單取消被收回後會出現這種狀態', () => {
+	// 主辦方 10-10：收回與人工扣除可以把餘額扣成負的。
+	// 那種帳號完全不能應援，所以輸入什麼都要壓成 0，而且不能回填成 "-5000"。
+	const r = sanitizeStake('100', -5000);
+	assert.equal(r.value, 0);
+	assert.equal(r.text, '0');
+	assert.equal(r.clamped, true);
+	assert.equal(sanitizeStake('999999', -1).value, 0);
+});
+
 console.log(`\n${passed} 項全部通過`);

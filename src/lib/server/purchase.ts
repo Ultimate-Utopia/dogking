@@ -460,8 +460,8 @@ export async function unusedCodes(limit = 50) {
 export interface RevokeResult {
 	revoked: number;
 	chips: number;
-	/** 餘額不夠、只收回一部分的那些人 */
-	short: Array<{ displayName: string; orderRef: string; wanted: number; taken: number }>;
+	/** 收完之後餘額變成負的那些人 —— 幣已經應援出去了，要補新訂單才能再應援 */
+	negative: Array<{ displayName: string; orderRef: string; chips: number; after: number }>;
 	failed: number;
 }
 
@@ -478,9 +478,13 @@ export interface RevokeResult {
  * 帳本是餘額的唯一來源，刪掉歷史就再也查不出「這個人為什麼少了兩萬」。
  * 收回後紀錄上看得到 +20,000 與 −20,000 兩筆，說得清楚。
  *
- * ⚠️ <strong>餘額不夠時只收回剩下的，不會把餘額扣成負的。</strong>
- * 幣可能已經應援出去了，而負餘額會讓整個系統的前提（餘額永遠 ≥ 0）破掉。
- * 差額會列在 short 裡讓操作員知道，要再追就用人工扣除。
+ * ⚠️ <strong>餘額不夠時會扣成負數</strong>（主辦方 10-10 定案）。
+ * 幣可能已經應援出去了，手上剩 0；若因此不扣，等於讓人靠一張取消的訂單白賺一筆。
+ * 照實扣成負的，欠多少是多少，要再應援得先補一張新訂單。
+ * 餘額變負的人會列在 negative 裡，操作員看得到。
+ *
+ * 負餘額不會讓系統出問題：前台的金額輸入上限是 max(0, 餘額)、
+ * 應援按鈕要 0 < 金額 ≤ 餘額，所以負餘額就是完全不能應援 —— 這正是我們要的。
  *
  * ⚠️ 一律以資料庫當下的數字為準重新撈一次，不信任前端送回來的預覽。
  */
@@ -490,7 +494,7 @@ export async function revokeOrders(
 	adminUserId: string
 ): Promise<RevokeResult> {
 	const refs = rows.filter((r) => r.status === 'revoke').map((r) => r.orderRef);
-	const out: RevokeResult = { revoked: 0, chips: 0, short: [], failed: 0 };
+	const out: RevokeResult = { revoked: 0, chips: 0, negative: [], failed: 0 };
 
 	for (const ref of refs) {
 		try {
@@ -503,33 +507,30 @@ export async function revokeOrders(
 				if (!order) return; // 別人剛剛收回過了
 
 				await lockUser(tx, order.userId);
-				const balance = await getBalance(order.userId, tx);
-				const take = Math.min(order.chips, balance);
-
-				if (take > 0) {
-					await writeLedger(tx, {
-						userId: order.userId,
-						type: 'adjust',
-						amount: -take,
-						note: `訂單 ${ref} 已取消，收回商品消費贈送的狗狗幣`
-					});
-				}
+				const after = await writeLedger(tx, {
+					userId: order.userId,
+					type: 'adjust',
+					amount: -order.chips,
+					note: `訂單 ${ref} 已取消，收回商品消費贈送的狗狗幣`,
+					allowNegative: true
+				});
 
 				await tx.delete(purchaseOrders).where(eq(purchaseOrders.id, order.id));
 
 				out.revoked++;
-				out.chips += take;
-				if (take < order.chips) {
+				out.chips += order.chips;
+
+				if (after < 0) {
 					const [u] = await tx
 						.select({ displayName: users.displayName })
 						.from(users)
 						.where(eq(users.id, order.userId))
 						.limit(1);
-					out.short.push({
+					out.negative.push({
 						displayName: u?.displayName ?? order.userId,
 						orderRef: ref,
-						wanted: order.chips,
-						taken: take
+						chips: order.chips,
+						after
 					});
 				}
 			});
@@ -549,9 +550,9 @@ export async function revokeOrders(
  * 重複下單、誤發、違規等等。理由是必填的 —— 事後有爭議時，
  * 帳本上那一行就是唯一的依據。
  *
- * ⚠️ 餘額不足時<strong>整筆拒絕</strong>，不會扣一部分。
- * 操作員打的是一個明確的數字，自作主張扣少一點只會讓對帳更亂；
- * 訊息會寫出目前餘額，要扣到 0 為止就改填那個數字。
+ * ⚠️ 餘額不足時<strong>會扣成負數</strong>（主辦方 10-10 定案）。
+ * 幣可能已經應援出去了，手上剩 0；若因此不扣，等於讓人白賺一筆。
+ * 負餘額的人完全不能再應援，要補一張新訂單把餘額拉回正的才行。
  */
 export async function deductByPublicCode(
 	rawCode: string,
@@ -574,18 +575,12 @@ export async function deductByPublicCode(
 
 		await lockUser(tx, user.id);
 		const before = await getBalance(user.id, tx);
-		if (before < amount) {
-			throw new PurchaseError(
-				`${user.displayName} 目前只有 ${before.toLocaleString('zh-TW')} 狗狗幣，不夠扣 ${amount.toLocaleString('zh-TW')}。` +
-					`要扣到 0 為止請改填 ${before.toLocaleString('zh-TW')}。`
-			);
-		}
-
 		const after = await writeLedger(tx, {
 			userId: user.id,
 			type: 'adjust',
 			amount: -amount,
-			note: `管理員扣除：${reason.trim()}`
+			note: `管理員扣除：${reason.trim()}`,
+			allowNegative: true
 		});
 
 		void adminUserId;

@@ -977,3 +977,21 @@ a.member:hover {
 .foot-list li {
 	padding-left: 2px;
 }
+
+/* ── 負餘額提示 ───────────────────────────────────────
+   少見但一定要講清楚：觀眾看到負數會以為系統壞了。
+   放在最上面、整條橫的，不要讓人錯過。 */
+.owe {
+	max-width: 1100px;
+	margin: 12px auto 0;
+	padding: 12px 16px;
+	border: 1px solid var(--red);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--red) 10%, transparent);
+	color: var(--ink);
+	font-size: 13.5px;
+	line-height: 1.75;
+}
+.owe a {
+	color: var(--red);
+}

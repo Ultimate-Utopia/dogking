@@ -207,8 +207,9 @@
 	}
 
 	function addChip(v: number) {
+		// 餘額可能是負的（訂單取消被收回），所以下限要壓在 0，不能直接寫 stake = balance
 		if (stake + v <= balance) stake += v;
-		else stake = balance;
+		else stake = Math.max(0, balance);
 	}
 
 	/**
@@ -244,8 +245,11 @@
 	 */
 	$effect(() => {
 		if (stake > balance) {
-			stake = balance;
-			stakeText = balance === 0 ? '' : String(balance);
+			// 餘額可能是負的（訂單取消被收回）。直接 stake = balance 會讓
+			// 輸入框出現「-5000」這種東西，所以下限壓在 0。
+			const max = Math.max(0, balance);
+			stake = max;
+			stakeText = max === 0 ? '' : String(max);
 			stakeClamped = true;
 		}
 	});
@@ -417,6 +421,19 @@
 		{/if}
 	</div>
 </div>
+
+<!-- ── 負餘額提示 ─────────────────────────────────────
+     訂單取消被收回、或主辦方人工扣除時，餘額可能變成負的。
+     不解釋的話觀眾只會看到一個負數，完全不知道發生什麼事。 -->
+{#if user && balance < 0}
+	<div class="owe">
+		你目前的狗狗幣是 <b>{fmt(balance)}</b>。
+		這代表先前發放給你的狗狗幣被收回（訂單取消、退款，或主辦方調整），而當時那些幣已經應援出去了。
+		<br />
+		<b>餘額回到正數之前無法再應援。</b>詳細的進出紀錄在<a href="/coins">「獲得狗狗幣」</a>頁最下方；
+		有疑問請透過主辦方公告的客服管道聯繫。
+	</div>
+{/if}
 
 <div class="board">
 	{#if form?.success}<div class="msg-ok">{form.success}</div>{/if}

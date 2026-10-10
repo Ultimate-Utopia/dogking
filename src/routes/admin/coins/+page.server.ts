@@ -138,12 +138,12 @@ export const actions: Actions = {
 		}
 
 		const parts = [`已收回 ${result.revoked} 筆訂單，共 ${result.chips.toLocaleString('zh-TW')} 狗狗幣`];
-		if (result.short.length) {
-			// 餘額不夠的要寫出來 —— 幣已經應援出去了，差額收不回來
-			const list = result.short
-				.map((s) => `${s.displayName}（訂單 ${s.orderRef} 應收 ${s.wanted.toLocaleString('zh-TW')}、實收 ${s.taken.toLocaleString('zh-TW')}）`)
+		if (result.negative.length) {
+			// 幣已經應援出去的人會被扣成負數，要寫出來讓操作員知道去跟誰講
+			const list = result.negative
+				.map((s) => `${s.displayName}（訂單 ${s.orderRef}，餘額 ${s.after.toLocaleString('zh-TW')}）`)
 				.join('、');
-			parts.push(`其中 ${result.short.length} 筆餘額不足，只收回部分：${list}`);
+			parts.push(`其中 ${result.negative.length} 人餘額變成負數（幣已經應援出去了），要補新訂單才能再應援：${list}`);
 		}
 		if (result.failed) parts.push(`${result.failed} 筆失敗，請重新預覽確認`);
 		return { success: parts.join('。') };
