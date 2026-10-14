@@ -15,6 +15,13 @@ export const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 /** 為什麼這筆訂單不能發幣。null 代表可以（還要再看有沒有對到帳號）。 */
 export type OrderBlock =
 	| 'not-paid'
+	/**
+	 * 取貨時才付款（超商取貨付款、貨到付款）。
+	 *
+	 * 這種單在平台上一樣是「待出貨」，但<strong>錢還沒收到</strong> ——
+	 * 東西送到門市、買家去取件時才付。要等真的取件了才能發幣。
+	 */
+	| 'cod'
 	/** 平台上的狀態不在「可發放」之列（綠界：非待出貨）。不是壞事，只是要人工決定 */
 	| 'other-status'
 	| 'cancelled'
@@ -302,18 +309,35 @@ function findEcpayDonationHeader(rows: string[][]): number {
 }
 
 /**
+ * 取貨時才付款的付款方式。
+ *
+ * 綠界的寫法是「7-ELEVEN超商取貨付款」「全家超商取貨付款」，
+ * 宅配則是「貨到付款」。共同點都是<strong>錢在取件當下才收</strong>。
+ *
+ * ⚠️ 不要把「超商代碼」「超商條碼」也算進來 —— 那兩種是<u>先繳費</u>
+ * 的代收：買家拿代碼去超商付錢，付完訂單才會變成待出貨。
+ * 兩者差一個字，判斷錯了就是發錯幣或漏發。
+ */
+const COD_PAYMENT = /取貨付款|貨到付款/;
+
+/**
  * 這張訂單算不算「可以發幣」。
  *
- * 主辦方 10-07 定案：**訂單狀態為「待出貨」就發**，不分付款方式
- * （先前一版限定信用卡，因為當時以為只有信用卡能確認收款）。
+ * 主辦方 10-07 定案：**訂單狀態為「待出貨」就發**。
+ *
+ * ⚠️ 10-14 補一條：<strong>超商取貨付款要排除</strong>。那種單在平台上
+ * 一樣是「待出貨」，但錢要等買家去門市取件才收得到 —— 照「待出貨就發」
+ * 會把還沒收到錢的訂單也發出去（主辦方 10-14 回報的誤發就是這個）。
+ * 這條<u>比狀態優先</u>：付款方式對不上，狀態再漂亮也不能發。
  *
  * ⚠️ 其他狀態（已出貨、已完成…）不會自動發，但也不是錯誤 ——
  * 這類訂單在預覽裡會標成「非待出貨」並附上「開兌換券」按鈕，由操作員決定。
  * 刻意不自動發：萬一主辦方的流程是出貨後才算數，自動發就收不回來了。
  * 反過來說，<u>訂單一旦出貨就不會再被自動發幣</u>，所以匯入要趁出貨前做。
  */
-function ecpayBlock(status: string): OrderBlock {
+function ecpayBlock(status: string, payment: string): OrderBlock {
 	if (/取消|退款|退貨|失敗/.test(status)) return 'cancelled';
+	if (COD_PAYMENT.test(payment)) return 'cod';
 	if (status.includes('待出貨')) return null;
 	return 'other-status';
 }
@@ -424,7 +448,7 @@ export function parseEcpay(rows: string[][], shop = ECPAY_DEFAULT_SHOP): ParsedO
 			totalTwd: total,
 			rawCode,
 			code: rawCode ? extractCode(rawCode) : null,
-			block: ecpayBlock(status),
+			block: ecpayBlock(status, payment),
 			// 兩個都寫出來，操作員才看得懂為什麼這筆不能發
 			statusText: payment ? `${status}・${payment}` : status
 		});
@@ -514,8 +538,10 @@ export type ImportStatus =
 	/** 抓到 6 碼，但沒有這個帳號 */
 	| 'unknown-code'
 	| 'already-credited'
-	/** 已經發過幣，但這次匯入看到訂單被取消了 —— 要把幣收回來 */
+	/** 已經發過幣，但這次匯入看到訂單被取消、或根本不該發（取貨付款）—— 要把幣收回來 */
 	| 'revoke'
+	/** 取貨時才付款，錢還沒收到 */
+	| 'cod'
 	| 'bad-amount'
 	| 'not-paid'
 	| 'other-status'
@@ -530,10 +556,10 @@ export type ImportStatus =
  * ⚠️ 判斷順序是有意義的，不要重排：
  *
  *   1. 已經發過幣的先處理。重匯同一份檔案時操作員才看得懂，
- *      而且<strong>訂單後來被取消的話要能認出來</strong>（status = revoke）。
- *      只認 cancelled（取消／退款／退貨／付款失敗）：「已出貨」「已完成」
- *      也不是待出貨，但那是比待出貨更後面的階段，錢早就收了，
- *      把幣收回來等於搶劫。
+ *      而且<strong>不該發的要能認出來</strong>（status = revoke）。
+ *      認兩種：cancelled（取消／退款／退貨／付款失敗）與 cod（取貨才付款，
+ *      錢根本還沒收到）。<u>「已出貨」「已完成」不算</u> —— 那是比待出貨
+ *      更後面的階段，錢早就收了，把幣收回來等於搶劫。
  *   2. 兌換券一定要排在 ready 前面。否則同一張訂單先開了券、
  *      觀眾後來又把代碼補填進平台的留言欄，就會再自動發一次 —— 變成雙倍。
  *   3. 「沒填」與「填了但看不懂」要分開：前者要去問買家，
@@ -555,7 +581,10 @@ export function decideImportStatus(o: {
 	/** 代碼對得到帳號 */
 	hasOwner: boolean;
 }): ImportStatus {
-	if (o.alreadyCredited) return o.block === 'cancelled' ? 'revoke' : 'already-credited';
+	// 已經發過幣的，先看這次的狀態是不是「根本不該發」
+	if (o.alreadyCredited) {
+		return o.block === 'cancelled' || o.block === 'cod' ? 'revoke' : 'already-credited';
+	}
 	if (o.voucher?.used) return 'voucher-used';
 	if (o.voucher) return 'voucher-issued';
 	if (o.block) return o.block;

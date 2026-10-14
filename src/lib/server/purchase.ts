@@ -10,7 +10,7 @@
 
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
 import { db } from './db';
-import { users, ledger, purchaseOrders, redeemCodes } from './db/schema';
+import { users, ledger, purchaseOrders, redeemCodes, redeemUses } from './db/schema';
 import { getBalance, lockUser, writeLedger } from './ledger';
 import {
 	CODE_ALPHABET,
@@ -372,7 +372,17 @@ export async function issueVoucherForOrder(orderRef: string, amountTwd: number, 
 	return { code, amount, reused: false };
 }
 
-/** 兌換。已使用或不存在都回同一種錯誤訊息，避免被拿來猜碼。 */
+/**
+ * 兌換。不存在與已使用都回同一種錯誤訊息，避免被拿來猜碼。
+ *
+ * 兩種券：
+ *   ・一般券　一組碼只能用一次，用完就作廢（對應某一張訂單）
+ *   ・共用券　一組碼發給很多人，<strong>每個帳號限用一次</strong>
+ *
+ * ⚠️ 共用券的「同一個人不能換兩次」靠 <code>redeem_uses</code> 的
+ * 唯一索引擋，<u>不是靠這裡的檢查</u>。同一個人連點兩下會有兩個交易
+ * 同時進來，兩邊都查不到紀錄、都覺得可以發 —— 只有資料庫的唯一索引擋得住。
+ */
 export async function redeem(userId: string, rawCode: string) {
 	const code = rawCode.trim().toUpperCase().replace(/\s/g, '');
 	if (!code) throw new PurchaseError('請輸入兌換券碼');
@@ -385,14 +395,22 @@ export async function redeem(userId: string, rawCode: string) {
 			.for('update')
 			.limit(1);
 
-		if (!row || row.usedByUserId) {
-			throw new PurchaseError('兌換券碼無效或已被使用');
-		}
+		if (!row) throw new PurchaseError('兌換券碼無效或已被使用');
 
-		await tx
-			.update(redeemCodes)
-			.set({ usedByUserId: userId, usedAt: new Date() })
-			.where(eq(redeemCodes.code, code));
+		if (row.multiUse) {
+			try {
+				await tx.insert(redeemUses).values({ code, userId, amount: row.amount });
+			} catch {
+				// 唯一索引擋下的 —— 這個帳號已經換過這組碼了
+				throw new PurchaseError('這組兌換券你已經兌換過了');
+			}
+		} else {
+			if (row.usedByUserId) throw new PurchaseError('兌換券碼無效或已被使用');
+			await tx
+				.update(redeemCodes)
+				.set({ usedByUserId: userId, usedAt: new Date() })
+				.where(eq(redeemCodes.code, code));
+		}
 
 		await lockUser(tx, userId);
 		await writeLedger(tx, {
@@ -435,7 +453,9 @@ export async function codeStats() {
 			used: sql<number>`COUNT(${redeemCodes.usedByUserId})::int`,
 			unusedValue: sql<number>`COALESCE(SUM(CASE WHEN ${redeemCodes.usedByUserId} IS NULL THEN ${redeemCodes.amount} ELSE 0 END), 0)::bigint`
 		})
-		.from(redeemCodes);
+		.from(redeemCodes)
+		// 共用券不算在這裡 —— 它沒有「用完就沒了」的概念，混在一起數字會看不懂
+		.where(eq(redeemCodes.multiUse, false));
 
 	return {
 		total: Number(row?.total ?? 0),
@@ -448,7 +468,7 @@ export async function unusedCodes(limit = 50) {
 	return db
 		.select()
 		.from(redeemCodes)
-		.where(isNull(redeemCodes.usedByUserId))
+		.where(and(isNull(redeemCodes.usedByUserId), eq(redeemCodes.multiUse, false)))
 		.orderBy(desc(redeemCodes.createdAt))
 		.limit(limit);
 }
@@ -586,4 +606,75 @@ export async function deductByPublicCode(
 		void adminUserId;
 		return { displayName: user.displayName, publicCode: user.publicCode ?? code, before, after };
 	});
+}
+
+// ─────────────────────────────────────────────────────────
+// 共用兌換券
+// ─────────────────────────────────────────────────────────
+
+/**
+ * 開一組共用券：同一組碼可以公開發出去，<strong>每個帳號限用一次</strong>。
+ *
+ * 用於直播抽獎、補償、公告裡公開發放 —— 一般券是一人一碼，
+ * 要發給三百個人就得產三百組，公告也貼不了。
+ *
+ * ⚠️ 刻意<u>不做</u>「同一個帳號可以無限次兌換」。那等於任何人都能
+ * 無限刷幣，排行榜與獎品就沒有意義了。要放寬得先想清楚怎麼防。
+ */
+export async function createSharedCode(amount: number, note: string) {
+	if (!Number.isInteger(amount) || amount <= 0) {
+		throw new PurchaseError('面額必須是正整數');
+	}
+	if (amount > 10_000_000) {
+		// 手滑多打幾個 0 的話，一組碼就能把整個排行榜洗掉
+		throw new PurchaseError('單組共用券面額上限 10,000,000 狗狗幣');
+	}
+
+	const code = `${randomCode(4)}-${randomCode(4)}-${randomCode(4)}`;
+	await db.insert(redeemCodes).values({ code, amount, multiUse: true, note: note.trim() || null });
+	return { code, amount };
+}
+
+/** 共用券清單，含已經有幾個人兌換過。 */
+export async function sharedCodes(limit = 50) {
+	const rows = await db
+		.select({
+			code: redeemCodes.code,
+			amount: redeemCodes.amount,
+			note: redeemCodes.note,
+			createdAt: redeemCodes.createdAt,
+			uses: sql<number>`(SELECT COUNT(*) FROM ${redeemUses} WHERE ${redeemUses.code} = ${redeemCodes.code})::int`
+		})
+		.from(redeemCodes)
+		.where(eq(redeemCodes.multiUse, true))
+		.orderBy(desc(redeemCodes.createdAt))
+		.limit(limit);
+
+	return rows.map((r) => ({
+		code: r.code,
+		amount: Number(r.amount),
+		note: r.note,
+		createdAt: r.createdAt,
+		uses: Number(r.uses),
+		/** 已經發出去的總額，拿來對帳 */
+		issued: Number(r.amount) * Number(r.uses)
+	}));
+}
+
+/**
+ * 停用一組共用券。
+ *
+ * 直接刪掉就好 —— 兌換紀錄是 ON DELETE CASCADE，<u>但已經入帳的狗狗幣
+ * 不會被收回</u>（帳本是獨立的）。刪掉只是讓這組碼之後不能再用。
+ */
+export async function disableSharedCode(code: string) {
+	const [row] = await db
+		.select()
+		.from(redeemCodes)
+		.where(and(eq(redeemCodes.code, code.trim().toUpperCase()), eq(redeemCodes.multiUse, true)))
+		.limit(1);
+	if (!row) throw new PurchaseError('找不到這組共用券');
+
+	await db.delete(redeemCodes).where(eq(redeemCodes.code, row.code));
+	return { code: row.code, amount: Number(row.amount) };
 }

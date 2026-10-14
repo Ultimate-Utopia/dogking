@@ -8,6 +8,9 @@ import {
 	deductByPublicCode,
 	issueVoucherForOrder,
 	createRedeemCodes,
+	createSharedCode,
+	sharedCodes,
+	disableSharedCode,
 	backfillPublicCodes,
 	recentOrders,
 	codeStats,
@@ -18,8 +21,13 @@ import {
 import { ECPAY_DEFAULT_SHOP } from '$lib/order-formats';
 
 export const load: PageServerLoad = async () => {
-	const [orders, stats, codes] = await Promise.all([recentOrders(20), codeStats(), unusedCodes(30)]);
-	return { orders, stats, codes, rate: CHIPS_PER_TWD };
+	const [orders, stats, codes, shared] = await Promise.all([
+		recentOrders(20),
+		codeStats(),
+		unusedCodes(30),
+		sharedCodes(30)
+	]);
+	return { orders, stats, codes, shared, rate: CHIPS_PER_TWD };
 };
 
 export const actions: Actions = {
@@ -245,6 +253,42 @@ export const actions: Actions = {
 		} catch (e) {
 			if (e instanceof PurchaseError) return fail(400, { error: e.message });
 			return fail(400, { error: '產生失敗' });
+		}
+	},
+
+	/** 開一組共用券：公開發給很多人，每個帳號限用一次。 */
+	makeShared: async ({ request, locals }) => {
+		const admin = requireAdmin(locals.user);
+		const form = await request.formData();
+		const amount = Number(form.get('amount') ?? 0);
+		const note = String(form.get('note') ?? '');
+
+		try {
+			const r = await createSharedCode(amount, note);
+			await logAdmin(admin.id, '產生共用兌換券', `${r.code} × ${r.amount}`, { note });
+			return {
+				sharedIssued: r,
+				success: `已產生共用兌換券 ${r.code}，面額 ${r.amount.toLocaleString('zh-TW')} 狗狗幣`
+			};
+		} catch (e) {
+			if (e instanceof PurchaseError) return fail(400, { error: e.message });
+			return fail(400, { error: '產生失敗' });
+		}
+	},
+
+	/** 停用一組共用券。已經入帳的狗狗幣不會被收回。 */
+	disableShared: async ({ request, locals }) => {
+		const admin = requireAdmin(locals.user);
+		const form = await request.formData();
+		const code = String(form.get('code') ?? '');
+
+		try {
+			const r = await disableSharedCode(code);
+			await logAdmin(admin.id, '停用共用兌換券', r.code, { amount: r.amount });
+			return { success: `已停用共用兌換券 ${r.code}，之後不能再兌換（已入帳的不會收回）` };
+		} catch (e) {
+			if (e instanceof PurchaseError) return fail(400, { error: e.message });
+			return fail(400, { error: '停用失敗' });
 		}
 	},
 

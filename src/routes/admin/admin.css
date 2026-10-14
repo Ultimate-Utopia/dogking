@@ -535,3 +535,26 @@ td.n.neg {
 	gap: 10px;
 	margin-bottom: 10px;
 }
+
+/* 剛產生的共用券。只會顯示一次就夠 —— 下面的清單一直看得到，
+   但剛按完的那一組要跳出來，不然在列表裡要自己找。 */
+.code-hit {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 12px;
+	margin-bottom: 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--ok);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.code-hit b {
+	font-family: var(--mono);
+	font-size: 19px;
+	letter-spacing: 0.04em;
+}
+.code-hit span {
+	color: var(--muted);
+	font-size: 13px;
+}

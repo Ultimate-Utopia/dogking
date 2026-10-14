@@ -21,6 +21,7 @@
 		revoke: { label: '已發幣・訂單取消', cls: 't-void' },
 		'bad-amount': { label: '金額有問題', cls: 't-void' },
 		'not-paid': { label: '尚未付款', cls: 't-settled' },
+		cod: { label: '取貨才付款', cls: 't-locked' },
 		'voucher-issued': { label: '已開兌換券', cls: 't-locked' },
 		'voucher-used': { label: '券已兌換', cls: 't-settled' },
 		cancelled: { label: '已取消', cls: 't-settled' },
@@ -30,6 +31,7 @@
 	/** 這幾種是平台上的狀態造成的，不是操作員要處理的問題，等付款後重匯即可 */
 	const WAITING = new Set([
 		'not-paid',
+		'cod',
 		'other-status',
 		'cancelled',
 		'merged',
@@ -38,8 +40,13 @@
 		'voucher-used'
 	]);
 
-	/** 需要開券的：已付款、但代碼對不到帳號 */
-	const NEEDS_VOUCHER = new Set(['no-code', 'bad-code', 'unknown-code', 'other-status']);
+	/**
+	 * 需要開券的：已付款、但代碼對不到帳號。
+	 *
+	 * 取貨付款（cod）也放進來 —— 系統不會自動發，但買家真的去門市取件付錢之後，
+	 * 操作員確認了就可以手動開一張券給他。
+	 */
+	const NEEDS_VOUCHER = new Set(['no-code', 'bad-code', 'unknown-code', 'other-status', 'cod']);
 
 	let csvText = $state('');
 	let fileName = $state('');
@@ -186,6 +193,8 @@
 			<p class="hint" style="margin:0 0 8px">
 				已辨識為<strong>綠界商店訂單明細</strong>：只算<strong>賣場「{ctx.shop}」</strong>的訂單，
 				訂單狀態<strong>「待出貨」</strong>才自動發放，金額看<strong>「訂單小計」</strong>（商品本身的錢，不含運費）。
+				<br /><b>超商取貨付款不會自動發</b>：那種單的狀態一樣是「待出貨」，但錢要等買家去門市取件才收得到。
+				確認取件付款後，用那一列的「開兌換券」手動補。
 				滿一千免運的訂單運費欄仍然會寫 65，但系統不看那一欄，所以不會重複扣。
 				{#if ctx.shops.length > 1}
 					<br />檔案裡其他賣場已略過：{ctx.shops
@@ -205,17 +214,19 @@
 			合計 <strong>{fmt(readyChips)}</strong> 狗狗幣。
 			{#if problemRows.length}有 {problemRows.length} 筆需要處理。{/if}
 			{#if waitingRows.length}
-				另有 {waitingRows.length} 筆未付款、已取消、已合併或已發過，這次不會發，之後重匯同一份檔案也不會重複。
+				另有 {waitingRows.length} 筆未付款、取貨才付款、已取消、已合併或已發過，這次不會發，之後重匯同一份檔案也不會重複。
 			{/if}
 		</p>
 
 		{#if revokeRows.length}
 			<p class="warn" style="border-color:var(--red)">
-				⚠️ 有 <strong>{revokeRows.length} 筆已經發過幣的訂單，這次看到被取消了</strong>，
+				⚠️ 有 <strong>{revokeRows.length} 筆已經發過幣的訂單，這次判定為不該發</strong>，
 				合計 <strong>{fmt(revokeChips)}</strong> 狗狗幣。按下方的「收回」才會扣，發放與收回是分開的兩個動作。
 				<br />
-				只有<strong>取消／退款／退貨／付款失敗</strong>會進到這裡。「已出貨」「已完成」也不是待出貨，
-				但那是比待出貨更後面的階段、錢早就收了，不會自動收回；真要處理請用下方的「人工扣除」。
+				兩種情況會進到這裡：<strong>訂單被取消／退款／退貨／付款失敗</strong>，
+				以及<strong>超商取貨付款</strong>（錢要取件時才收，先前被誤發的就是這種）。
+				「已出貨」「已完成」不算 —— 那是比待出貨更後面的階段、錢早就收了，不會自動收回；
+				真要處理請用下方的「人工扣除」。
 				<br />
 				若對方已經把幣應援出去、手上不夠扣，<b>餘額會變成負數</b>（不是少收）——
 				負餘額的人完全不能再應援，要補一張新訂單把餘額拉回正的才行。收完會列出有誰。
@@ -493,6 +504,92 @@
 		<span>已使用 <b>{data.stats.used}</b> 組</span>
 		<span>未使用面額合計 <b>{fmt(data.stats.unusedValue)}</b></span>
 	</div>
+</div>
+
+<!-- ── 共用兌換券 ────────────────────────────────────── -->
+<h2>共用兌換券</h2>
+<div class="panel">
+	<p class="hint" style="margin:0 0 14px">
+		<b>一組碼可以公開發給很多人，每個帳號限用一次。</b>
+		直播抽獎、補償、公告裡公開發放用 —— 上面那種「產生兌換券」是一人一碼，
+		要發給三百個人就得產三百組，公告也貼不了。
+		<br />
+		⚠️ 同一個人<b>不能</b>重複兌換同一組碼（資料庫擋著）。
+		碼公開出去之後誰看到都能用，所以面額自己斟酌。
+	</p>
+
+	{#if form && 'sharedIssued' in form && form.sharedIssued}
+		<div class="code-hit">
+			<b>{form.sharedIssued.code}</b>
+			<span>面額 {fmt(form.sharedIssued.amount)} 狗狗幣</span>
+		</div>
+	{/if}
+
+	<form
+		method="POST"
+		action="?/makeShared"
+		class="field-row"
+		use:enhance={({ formData, cancel }) => {
+			const a = Number(formData.get('amount') ?? 0);
+			if (!confirm(`要產生一組面額 ${a.toLocaleString('zh-TW')} 狗狗幣的共用券嗎？每個帳號都能各領一次。`)) cancel();
+		}}
+	>
+		<div class="field">
+			<label for="sa">面額</label>
+			<input id="sa" name="amount" type="number" min="1" required value="1000" style="width:150px" />
+		</div>
+		<div class="field" style="flex:1;min-width:220px">
+			<label for="sn">說明（選填，只有後台看得到）</label>
+			<input id="sn" name="note" type="text" placeholder="例：10/18 直播公告" style="width:100%" />
+		</div>
+		<button class="b b-quiet" style="flex:0" type="submit">產生共用券</button>
+	</form>
+
+	{#if data.shared.length}
+		<div class="scrollable" style="margin-top:16px">
+			<table>
+				<thead>
+					<tr>
+						<th>券碼</th>
+						<th class="n">面額</th>
+						<th class="n">已兌換</th>
+						<th class="n">已發出</th>
+						<th>說明</th>
+						<th>開立時間</th>
+						<th>處理</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each data.shared as s (s.code)}
+						<tr>
+							<td style="font-family:var(--mono)">{s.code}</td>
+							<td class="n">{fmt(s.amount)}</td>
+							<td class="n">{s.uses} 人</td>
+							<td class="n">{fmt(s.issued)}</td>
+							<td>{s.note ?? '—'}</td>
+							<td>{when(s.createdAt)}</td>
+							<td>
+								<form
+									method="POST"
+									action="?/disableShared"
+									use:enhance={({ cancel }) => {
+										if (!confirm(`要停用 ${s.code} 嗎？之後不能再兌換，已經入帳的狗狗幣不會收回。`)) cancel();
+									}}
+								>
+									<input type="hidden" name="code" value={s.code} />
+									<button class="b b-quiet" style="flex:0;padding:5px 10px;font-size:12.5px" type="submit">
+										停用
+									</button>
+								</form>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{:else}
+		<p class="hint" style="margin:14px 0 0">還沒有共用券。</p>
+	{/if}
 </div>
 
 <!-- ── 未使用的兌換券 ────────────────────────────────── -->

@@ -322,11 +322,50 @@ export const redeemCodes = pgTable('redeem_codes', {
 	/** 對應的訂單編號，供對帳 */
 	orderRef: text('order_ref'),
 
+	/**
+	 * 共用券：一組碼可以發給很多人，<strong>但每個帳號只能兌換一次</strong>。
+	 *
+	 * 用於直播抽獎、補償、公告裡公開發放。
+	 * ⚠️ 共用券不會寫 used_by_user_id —— 誰換過看 redeem_uses。
+	 */
+	multiUse: boolean('multi_use').notNull().default(false),
+
+	/** 給操作員看的說明（共用券用，例如「10/18 直播公告」）。 */
+	note: text('note'),
+
 	usedByUserId: uuid('used_by_user_id').references(() => users.id),
 	usedAt: timestamp('used_at', { withTimezone: true }),
 
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+// ─────────────────────────────────────────────────────────
+// redeem_uses —— 共用券的兌換紀錄
+//
+// 一般券用 redeem_codes.used_by_user_id 就夠了（只能用一次）。
+// 共用券要記每一個人換過沒有，所以另外一張表，
+// 並用 (code, user_id) 的唯一索引擋下「同一個人換兩次」。
+// ─────────────────────────────────────────────────────────
+export const redeemUses = pgTable(
+	'redeem_uses',
+	{
+		id: bigserial('id', { mode: 'number' }).primaryKey(),
+		code: text('code')
+			.notNull()
+			.references(() => redeemCodes.code, { onDelete: 'cascade' }),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id),
+		/** 當下的面額。之後改面額也查得出這個人當初拿到多少。 */
+		amount: bigint('amount', { mode: 'number' }).notNull(),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [
+		// 同一個人同一組碼只能換一次 —— 這是防併發的關鍵，不能只靠程式檢查
+		uniqueIndex('redeem_uses_code_user_idx').on(t.code, t.userId),
+		index('redeem_uses_code_idx').on(t.code)
+	]
+);
 
 // ─────────────────────────────────────────────────────────
 // admin_logs —— 後台操作紀錄。誰在幾點對哪個應援場做了什麼。

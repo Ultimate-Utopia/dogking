@@ -163,6 +163,11 @@ const ecpayRows = [
 	ecpayRow('10829378', '待出貨', SHOP, '900', '0', '900', '', '信用卡一次付清', 'R5TY7U'),
 	// 運費空白
 	ecpayRow('10829377', '待出貨', SHOP, '500', '', '500', '', '信用卡一次付清', ''),
+	// 超商取貨付款：狀態一樣是待出貨，但錢要取件時才收 —— 不能發
+	ecpayRow('11395923', '待出貨', SHOP, '280', '0', '280', '', '7-ELEVEN超商取貨付款', 'G94UC2'),
+	ecpayRow('11395924', '待出貨', SHOP, '280', '0', '280', '', '全家超商取貨付款', 'G94UC3'),
+	// 超商代碼／條碼是先繳費的代收，付完才會變待出貨 —— 可以發
+	ecpayRow('11396269', '待出貨', SHOP, '600', '0', '600', '', '超商代碼', 'QWTFAG'),
 	// 其他賣場：匯出時會一起下載，要整筆略過
 	ecpayRow('99999999', '待出貨', '語風薯薯撿到貓-魔王城商品部', '9999', '65', '9999', '', '信用卡一次付清', 'K7M2QX')
 ];
@@ -173,7 +178,7 @@ const eBy = (ref: string) => ecpay.find((p) => p.orderRef === ref)!;
 t('認得出綠界商店格式（欄位順序不同也認得）', () => assert.equal(detectFormat(ecpayRows), 'ecpay'));
 
 t('只留賽事賣場的訂單', () => {
-	assert.equal(ecpay.length, 7);
+	assert.equal(ecpay.length, 10);
 	assert.equal(ecpay.find((p) => p.orderRef === '99999999'), undefined);
 });
 
@@ -238,15 +243,29 @@ t('運費 0 或空白都當 0，不會算成 NaN', () => {
 	assert.equal(eBy('10829377').amountTwd, 500);
 });
 
-t('待出貨 → 可以發，不分付款方式', () => {
-	assert.equal(eBy('11349648').block, null);
-	assert.equal(eBy('11288966').block, null);
+t('待出貨 + 先付款的付款方式 → 可以發', () => {
+	assert.equal(eBy('11349648').block, null); // 信用卡
+	assert.equal(eBy('11396269').block, null); // 超商代碼（先繳費）
 });
 t('已出貨 → 不自動發，標成「非待出貨」由人工決定', () => {
 	assert.equal(eBy('11340296').block, 'other-status');
-	assert.equal(eBy('11334582').block, 'other-status');
+	// 11334582 是超商取貨付款，付款方式比狀態優先，所以是 cod 不是 other-status
+	assert.equal(eBy('11334582').block, 'cod');
 });
 t('已取消 → 不發，即使是信用卡', () => assert.equal(eBy('10846939').block, 'cancelled'));
+
+t('超商取貨付款 → 不發，即使狀態是待出貨', () => {
+	// 主辦方 10-14 回報的誤發：貨到付款的單在平台上一樣是「待出貨」，
+	// 但錢要等買家去門市取件才收得到。
+	assert.equal(eBy('11395923').block, 'cod');
+	assert.equal(eBy('11395924').block, 'cod');
+});
+
+t('超商代碼／條碼是先繳費，照發', () => {
+	// ⚠️ 和「超商取貨付款」差一個字。這種是買家拿代碼去超商付錢，
+	// 付完訂單才會變成待出貨 —— 錢早就收了。
+	assert.equal(eBy('11396269').block, null);
+});
 
 t('狀態會寫出付款方式，操作員才知道為什麼不能發', () =>
 	assert.equal(eBy('11334582').statusText, '已出貨・7-ELEVEN超商取貨付款'));
@@ -265,7 +284,7 @@ t('代碼從買家備註抓，夾在句子裡也抓得到', () => {
 
 t('列出檔案裡的賣場與筆數', () => {
 	assert.deepEqual(ecpayShops(ecpayRows), [
-		{ name: SHOP, count: 7 },
+		{ name: SHOP, count: 10 },
 		{ name: '語風薯薯撿到貓-魔王城商品部', count: 1 }
 	]);
 });
@@ -310,7 +329,7 @@ console.log('匯入預覽的狀態判定');
 /** 一張正常的、可以發放的訂單；每個案例只改要測的那一項 */
 const base = {
 	alreadyCredited: false,
-	block: null as null | 'cancelled' | 'other-status' | 'not-paid' | 'merged',
+	block: null as null | 'cancelled' | 'cod' | 'other-status' | 'not-paid' | 'merged',
 	voucher: null as { used: boolean } | null,
 	amountOk: true,
 	code: 'K7M2QX' as string | null,
@@ -329,6 +348,11 @@ t('已發過幣、訂單被取消 → 要收回', () =>
 
 t('已發過幣、訂單「已出貨」→ 不收回（錢早就收了，比待出貨更後面）', () =>
 	assert.equal(st({ alreadyCredited: true, block: 'other-status' }), 'already-credited'));
+
+t('已發過幣、但其實是取貨付款 → 要收回（10-14 的誤發）', () =>
+	assert.equal(st({ alreadyCredited: true, block: 'cod' }), 'revoke'));
+
+t('沒發過幣、取貨付款 → 就是不發，不是收回', () => assert.equal(st({ block: 'cod' }), 'cod'));
 
 t('沒發過幣、訂單被取消 → 就是不發，不是收回', () =>
 	assert.equal(st({ block: 'cancelled' }), 'cancelled'));
