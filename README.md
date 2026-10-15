@@ -138,6 +138,32 @@ node scripts/seed.mjs --url "<正式站連線字串>" --admin "<你的 Discord �
 Discord 使用者 ID 的取得方式：Discord 設定 → 進階 → 開啟開發者模式，
 然後在自己的名字上按右鍵 → 複製使用者 ID。
 
+### 開後台權限
+
+對方要先用 Discord 登入過一次（才會有帳號），然後：
+
+```bash
+node scripts/set-admin.mjs --name 薯薯
+```
+
+**預設只試算**，確認是同一個人之後再加 `--apply`。`--list` 看目前有誰，
+`--revoke --apply` 收回權限。
+
+找到不只一個人會拒絕執行 —— 後台能發幣、能扣幣、能判定勝負，
+開錯人比漏開嚴重得多。也不會讓你收掉最後一個管理員。
+
+### 備份整個資料庫
+
+改資料表結構（migration）或做任何大範圍操作之前先跑一次：
+
+```bash
+node scripts/backup.mjs
+```
+
+只讀，寫到 `backups/full-<時間>.json`。`reset.mjs` 與 `revert-credits.mjs`
+只備份自己會動到的那幾張表，這支是全部。
+**檔案裡有 Discord 暱稱，不要外流**（`backups/` 已在 .gitignore 裡）。
+
 ### 改了名單上的文字（職稱、頻道連結、立繪檔名）
 
 主持群職稱之類的字串**存在資料庫**，`src/lib/data/roster.js` 只是建立當下的來源。
