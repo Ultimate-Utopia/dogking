@@ -152,6 +152,35 @@ node scripts/set-admin.mjs --name 薯薯
 找到不只一個人會拒絕執行 —— 後台能發幣、能扣幣、能判定勝負，
 開錯人比漏開嚴重得多。也不會讓你收掉最後一個管理員。
 
+### 每晚自動備份（活動期間）
+
+活動前後幾天讓 Windows 工作排程器每晚跑一次 `scripts/nightly-backup.cmd`：
+
+```powershell
+$t = New-ScheduledTaskTrigger -Daily -At 23:00
+$t.EndBoundary = (Get-Date -Year 2026 -Month 10 -Day 18 -Hour 6 -Minute 0 -Second 0).ToString("s")
+$a = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\cmd.exe" -Argument '/c C:\Users\User\Repo\DogKing\scripts\nightly-backup.cmd' -WorkingDirectory "C:\Users\User\Repo\DogKing"
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -DeleteExpiredTaskAfter (New-TimeSpan -Days 1) -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+Register-ScheduledTask -TaskName "DogKing 每晚備份資料庫" -Trigger $t -Action $a -Settings $s -Force
+```
+
+`EndBoundary` 設活動結束後的隔天，加上 `DeleteExpiredTaskAfter`，**過期會自己消失**，
+不用記得回來關。`StartWhenAvailable` 是為了「23:00 電腦剛好睡著」——醒來後會補跑。
+
+結果附加在 `backups/nightly.log`，工作排程器的「上次執行結果」是 `0` 就代表成功。
+想提早收工：
+
+```powershell
+Unregister-ScheduledTask -TaskName "DogKing 每晚備份資料庫" -Confirm:$false
+```
+
+> ⚠️ **`.cmd` 裡不要寫中文。** cmd.exe 用系統 ANSI 編碼（這台是 Big5）讀 `.cmd`，
+> UTF-8 的中文會變亂碼，亂碼裡夾到 `&` 之類的字元就會把那一行拆開當指令執行。
+> 中文說明寫在這份 README 就好。
+
+> ⚠️ 排程的動作要寫成 `cmd.exe /c <路徑>`，**不能直接指向 `.cmd`**
+> —— 直接指會回 `9009`（找不到程式）。
+
 ### 備份整個資料庫
 
 改資料表結構（migration）或做任何大範圍操作之前先跑一次：
