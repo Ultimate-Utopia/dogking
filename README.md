@@ -174,6 +174,21 @@ Register-ScheduledTask -TaskName "DogKing 每晚備份資料庫" -Trigger $t -Ac
 Unregister-ScheduledTask -TaskName "DogKing 每晚備份資料庫" -Confirm:$false
 ```
 
+**活動當天改成每小時一份**（一天只備一次的話，活動中途出事只能回溯到昨晚）：
+
+```powershell
+$start = Get-Date -Year 2026 -Month 10 -Day 17 -Hour 2 -Minute 0 -Second 0
+$end   = Get-Date -Year 2026 -Month 10 -Day 18 -Hour 23 -Minute 30 -Second 0
+$t = New-ScheduledTaskTrigger -Once -At $start -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration ($end - $start)
+$t.EndBoundary = $end.ToString("s")
+$a = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\cmd.exe" -Argument '/c C:\Users\User\Repo\DogKing\scripts\nightly-backup.cmd' -WorkingDirectory "C:\Users\User\Repo\DogKing"
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -DeleteExpiredTaskAfter (New-TimeSpan -Days 1) -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName "DogKing 活動期間每小時備份" -Trigger $t -Action $a -Settings $s -Force
+```
+
+`-MultipleInstances IgnoreNew` 是萬一某次跑特別久，下一個整點不要疊上去。
+一份約 2 MB，跑兩天不到 100 MB。
+
 > ⚠️ **`.cmd` 裡不要寫中文。** cmd.exe 用系統 ANSI 編碼（這台是 Big5）讀 `.cmd`，
 > UTF-8 的中文會變亂碼，亂碼裡夾到 `&` 之類的字元就會把那一行拆開當指令執行。
 > 中文說明寫在這份 README 就好。
