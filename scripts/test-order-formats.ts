@@ -18,6 +18,7 @@ import {
 	parseEcpay,
 	ecpayGoodsAmount,
 	decideImportStatus,
+	normalizeRedeemCode,
 	ecpayShops,
 	parseByColumns,
 	stripUnusedColumns
@@ -323,6 +324,34 @@ t('手動欄位：金額可含千分位', () => {
 });
 
 t('extractCode 不吃 7 碼以上的連續字元', () => assert.equal(extractCode('載具/ABC23456'), null));
+
+console.log('兌換券碼正規化');
+
+t('正常輸入原樣通過', () =>
+	assert.equal(normalizeRedeemCode('GY4S-QBZH-7TYJ'), 'GY4S-QBZH-7TYJ'));
+
+t('沒打破折號也認得 —— 活動當天兌換失敗的主因之一', () =>
+	assert.equal(normalizeRedeemCode('GY4SQBZH7TYJ'), 'GY4S-QBZH-7TYJ'));
+
+t('空白、小寫、換行、複製時多帶的標點都要吃得下', () => {
+	assert.equal(normalizeRedeemCode('  gy4s qbzh 7tyj\n'), 'GY4S-QBZH-7TYJ');
+	assert.equal(normalizeRedeemCode('GY4S–QBZH–7TYJ。'), 'GY4S-QBZH-7TYJ');
+	assert.equal(normalizeRedeemCode('「GY4S-QBZH-7TYJ」'), 'GY4S-QBZH-7TYJ');
+});
+
+t('全形數字與字母轉半形（中文輸入法很容易打出來）', () =>
+	assert.equal(normalizeRedeemCode('ＧＹ４Ｓ－ＱＢＺＨ－７ＴＹＪ'), 'GY4S-QBZH-7TYJ'));
+
+t('長度不對就原樣回去，讓它查無此碼', () => {
+	assert.equal(normalizeRedeemCode('ABC'), 'ABC');
+	assert.equal(normalizeRedeemCode('GY4S-QBZH-7TYJ-EXTRA'), 'GY4SQBZH7TYJEXTRA');
+	assert.equal(normalizeRedeemCode('   '), '');
+});
+
+t('不猜 0↔O、1↔I —— 產碼的字母表沒有這些字，硬猜會讓兩組碼撞在一起', () => {
+	// 原樣保留，查不到就是查不到
+	assert.equal(normalizeRedeemCode('OY4S-QBZH-7TYJ'), 'OY4S-QBZH-7TYJ');
+});
 
 console.log('匯入預覽的狀態判定');
 

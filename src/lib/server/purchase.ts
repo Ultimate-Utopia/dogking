@@ -23,6 +23,7 @@ import {
 	ECPAY_DEFAULT_SHOP,
 	parseByColumns,
 	decideImportStatus,
+	normalizeRedeemCode,
 	type ImportStatus,
 	type ParsedOrder,
 	type OrderFormat
@@ -384,20 +385,34 @@ export async function issueVoucherForOrder(orderRef: string, amountTwd: number, 
  * 同時進來，兩邊都查不到紀錄、都覺得可以發 —— 只有資料庫的唯一索引擋得住。
  */
 export async function redeem(userId: string, rawCode: string) {
-	const code = rawCode.trim().toUpperCase().replace(/\s/g, '');
+	const code = normalizeRedeemCode(rawCode);
 	if (!code) throw new PurchaseError('請輸入兌換券碼');
 
 	return db.transaction(async (tx) => {
+		// 先不鎖地讀一次，看是哪一種券。共用券接下來不會鎖這一列（理由見下）
 		const [row] = await tx
 			.select()
 			.from(redeemCodes)
 			.where(eq(redeemCodes.code, code))
-			.for('update')
 			.limit(1);
 
 		if (!row) throw new PurchaseError('兌換券碼無效或已被使用');
 
 		if (row.multiUse) {
+			/**
+			 * ⚠️ 共用券<strong>絕對不能</strong>對 redeem_codes 那一列下 FOR UPDATE。
+			 *
+			 * 共用券的重點就是「同一組碼很多人同時換」。鎖那一列等於把所有人
+			 * 排成一直線，每個人都要等前一個人跑完 lockUser + 算餘額 + 寫帳本
+			 * （跨洲往返，一輪好幾百毫秒）。主持人在直播上公布碼的那一瞬間
+			 * 幾十個人同時按，後面的就會卡到函式逾時 —— 使用者看到的是「兌換失敗」。
+			 *
+			 * 10-17 活動當天實際發生：公布後第 1、2 分鐘各 15 人成功，
+			 * 第 3 分鐘剩 5 人、第 5 分鐘之後掛零。
+			 *
+			 * 「一個人只能換一次」靠的是 redeem_uses 的 (code, user_id) 唯一索引，
+			 * 本來就不需要這個鎖。
+			 */
 			try {
 				await tx.insert(redeemUses).values({ code, userId, amount: row.amount });
 			} catch {
@@ -405,7 +420,15 @@ export async function redeem(userId: string, rawCode: string) {
 				throw new PurchaseError('這組兌換券你已經兌換過了');
 			}
 		} else {
-			if (row.usedByUserId) throw new PurchaseError('兌換券碼無效或已被使用');
+			// 一般券只能用一次，要鎖著重讀一次，才不會兩個人同時搶到同一張
+			const [locked] = await tx
+				.select()
+				.from(redeemCodes)
+				.where(eq(redeemCodes.code, code))
+				.for('update')
+				.limit(1);
+
+			if (!locked || locked.usedByUserId) throw new PurchaseError('兌換券碼無效或已被使用');
 			await tx
 				.update(redeemCodes)
 				.set({ usedByUserId: userId, usedAt: new Date() })
@@ -643,10 +666,15 @@ export async function sharedCodes(limit = 50) {
 			amount: redeemCodes.amount,
 			note: redeemCodes.note,
 			createdAt: redeemCodes.createdAt,
-			uses: sql<number>`(SELECT COUNT(*) FROM ${redeemUses} WHERE ${redeemUses.code} = ${redeemCodes.code})::int`
+			// ⚠️ 原本是手寫的相關子查詢，WHERE 沒有真的生效，
+			// 每一組都顯示「全部兌換紀錄的總數」—— 活動當天兩組碼都寫 52 人。
+			// 改用 LEFT JOIN + GROUP BY，交給 Drizzle 產生正確的欄位別名。
+			uses: sql<number>`count(${redeemUses.id})::int`
 		})
 		.from(redeemCodes)
+		.leftJoin(redeemUses, eq(redeemUses.code, redeemCodes.code))
 		.where(eq(redeemCodes.multiUse, true))
+		.groupBy(redeemCodes.code, redeemCodes.amount, redeemCodes.note, redeemCodes.createdAt)
 		.orderBy(desc(redeemCodes.createdAt))
 		.limit(limit);
 

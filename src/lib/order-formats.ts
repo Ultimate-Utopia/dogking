@@ -593,3 +593,23 @@ export function decideImportStatus(o: {
 	if (!o.hasOwner) return 'unknown-code';
 	return 'ready';
 }
+
+/**
+ * 把使用者打的兌換券碼正規化成 XXXX-XXXX-XXXX。
+ *
+ * 活動當天發現有人兌換失敗，最可能的原因之一就是這裡：原本只有
+ * 「去空白 + 轉大寫」，所以<u>沒打破折號</u>（GY4SQBZH7TYJ）、
+ * 用中文輸入法打出全形、或複製時多帶一個句點，通通查不到那組碼。
+ *
+ * 做法是把非英數字一律丟掉，剩 12 碼就自己補回破折號。
+ *
+ * ⚠️ 不做 0↔O、1↔I 這種「猜使用者想打什麼」的替換。
+ * 產碼用的字母表（CODE_ALPHABET）刻意不含 0 1 I L O，
+ * 真的碼裡不會出現它們；硬猜只會讓兩組不同的碼對到同一個。
+ */
+export function normalizeRedeemCode(raw: string): string {
+	const half = raw.replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+	const only = half.toUpperCase().replace(/[^0-9A-Z]/g, '');
+	if (only.length !== 12) return only;
+	return `${only.slice(0, 4)}-${only.slice(4, 8)}-${only.slice(8)}`;
+}
